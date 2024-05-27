@@ -1,0 +1,23 @@
+.logo-title {
+    display: flex;
+    flex-direction: row;
+    justify-content: center;
+}
+
+.logo-title img {
+    width: 3vh;
+}
+
+.auth {
+    max-width: 400px;
+    margin: auto;
+    top: 25%;
+}
+
+ion-col {
+    max-width: 11.4%;
+}
+
+.activities {
+    width: 20%;
+}
