@@ -15,11 +15,11 @@
       }
 
       .cls-3 {
-        fill: #0089fe;
+        fill: var(--ion-color-primary);
       }
 
       .cls-4 {
-        fill: #068bfe;
+        fill: var(--ion-color-tertiary);
       }
 
       .cls-5 {

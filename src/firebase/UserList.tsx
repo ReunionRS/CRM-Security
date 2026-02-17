@@ -1,48 +1,77 @@
-import React, {useEffect, useState} from "react";
-import {firestoreBase} from './Firebase';
-import {collection, deleteDoc, doc, getDocs} from "firebase/firestore";
-import 'firebase/auth';
+import React, { useEffect, useState } from 'react';
+import { firestoreBase } from './Firebase';
+import { collection, getDocs } from 'firebase/firestore';
+import {
+  IonGrid,
+  IonRow,
+  IonCol,
+  IonTitle,
+  IonLabel,
+  IonChip,
+} from '@ionic/react';
+import type { UserRole } from '../models/Roles';
+import { ROLE_LABELS } from '../models/Roles';
 
-
-function UserList() {
-
-    const [users, setUsers] = useState([])
-
-
-    const value = collection(firestoreBase, "users")
-
-    const getUsers = async () => {
-        const dbForms = await getDocs(value)
-        setUsers(dbForms.docs.map(doc => ({...doc.data(), uid: doc.id})))
-    }
-
-    useEffect(() => {
-        getUsers();
-    }, []);
-
-
-    return (
-        <ion-grid>
-            <ion-row>
-                <ion-col><ion-title color="primary" class="ion-no-padding">ФИО Клиента</ion-title></ion-col>
-                <ion-col>
-                    <ion-title color="primary" className="ion-no-padding">Email</ion-title>
-                </ion-col>
-            </ion-row>
-            {
-                users.map(form =>
-                    <ion-row key={form.uid}>
-                        <ion-col>
-                            {form.fio}
-                        </ion-col>
-                        <ion-col>
-                            {form.email}
-                        </ion-col>
-                    </ion-row>)
-            }
-        </ion-grid>
-    )
+interface UserRecord {
+  uid: string;
+  fio?: string;
+  email?: string;
+  role?: UserRole;
 }
 
+const UserList: React.FC = () => {
+  const [users, setUsers] = useState<UserRecord[]>([]);
+  const value = collection(firestoreBase, 'users');
+
+  const getUsers = async () => {
+    const snap = await getDocs(value);
+    setUsers(snap.docs.map((d) => ({ ...d.data(), uid: d.id } as UserRecord)));
+  };
+
+  useEffect(() => {
+    getUsers();
+  }, []);
+
+  return (
+    <IonGrid className="ion-padding">
+      <IonRow>
+        <IonCol>
+          <IonTitle color="primary" className="ion-no-padding">
+            ФИО
+          </IonTitle>
+        </IonCol>
+        <IonCol>
+          <IonTitle color="primary" className="ion-no-padding">
+            Email
+          </IonTitle>
+        </IonCol>
+        <IonCol>
+          <IonTitle color="primary" className="ion-no-padding">
+            Роль
+          </IonTitle>
+        </IonCol>
+      </IonRow>
+      {users.map((user) => (
+        <IonRow key={user.uid}>
+          <IonCol>
+            <IonLabel>{user.fio ?? '—'}</IonLabel>
+          </IonCol>
+          <IonCol>
+            <IonLabel>{user.email ?? '—'}</IonLabel>
+          </IonCol>
+          <IonCol>
+            {user.role ? (
+              <IonChip color="primary" outline>
+                {ROLE_LABELS[user.role]}
+              </IonChip>
+            ) : (
+              <IonLabel>—</IonLabel>
+            )}
+          </IonCol>
+        </IonRow>
+      ))}
+    </IonGrid>
+  );
+};
 
 export default UserList;

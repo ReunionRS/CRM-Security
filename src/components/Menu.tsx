@@ -1,100 +1,125 @@
 import {
-    IonContent,
-    IonHeader,
-    IonIcon,
-    IonItem,
-    IonItemDivider,
-    IonItemGroup,
-    IonLabel,
-    IonMenu,
-    IonMenuToggle,
-    IonRouterLink,
-    IonTitle,
-    IonToolbar
-} from "@ionic/react";
+  IonContent,
+  IonHeader,
+  IonIcon,
+  IonItem,
+  IonItemDivider,
+  IonItemGroup,
+  IonLabel,
+  IonMenu,
+  IonMenuToggle,
+  IonRouterLink,
+  IonTitle,
+  IonToolbar,
+} from '@ionic/react';
 import {
-    chevronDownOutline,
-    chevronDownSharp, cubeOutline, cubeSharp,
-    documentTextOutline, documentTextSharp, logOutOutline, navigate,
-    peopleCircleOutline,
-    wifiOutline
-} from "ionicons/icons";
-
-import React, {useState} from "react";
-import {getAuth, signOut} from "firebase/auth";
+  chevronDownOutline,
+  chevronDownSharp,
+  documentTextOutline,
+  documentTextSharp,
+  homeOutline,
+  peopleCircleOutline,
+  calendarOutline,
+  barChartOutline,
+} from 'ionicons/icons';
+import React, { useState } from 'react';
+import { useAuth } from '../context/AuthContext';
+import { ROLE_LABELS, type UserRole } from '../models/Roles';
 
 const Menu: React.FC = () => {
+  const [subMenu, setSubMenu] = useState<Record<string, boolean>>({});
+  const { role } = useAuth();
 
-    interface HideSubMenu {
-        [key: string]: boolean;
-    }
+  const toggleSubMenu = (key: string) => {
+    setSubMenu((prev) => ({ ...prev, [key]: !prev[key] }));
+  };
 
-    const [subMenu, setSubMenu] = useState<HideSubMenu>({});
+  const canSeeUsers = (r: UserRole | null) => r === 'admin' || r === 'director';
 
-    const toggleSubMenu = (sport: string) => {
-        setSubMenu((value) => {
-            return {...value, [sport]: !value[sport]};
-        });
-    }
-
-    const auth = getAuth()
-    async function handleSignOut(){
-        try {
-            await signOut(auth);
-        } catch (error) {
-            console.log(error)
-        }
-    }
-
-    return (
-        <IonMenu side="start" contentId="main-content">
-            <IonHeader>
-                <IonToolbar>
-                    <IonTitle>CRM-Menu</IonTitle>
-                    <IonMenu menuId="find-events-menu" side="start" contentId="main-content">
-                    </IonMenu>
-                </IonToolbar>
-            </IonHeader>
-            <IonContent className="ion-no-padding">
-                <IonItemGroup>
-                    <IonItemDivider onClick={() => toggleSubMenu('Control')}>
-                        <IonLabel>Управление оборудование</IonLabel>
-                        <IonIcon slot="end" color="medium" ios={chevronDownOutline} md={chevronDownSharp}/>
-                    </IonItemDivider>
-                    <IonMenuToggle hidden={subMenu.Control} autoHide={false}>
-                        <IonRouterLink href="/forms">
-                            <IonItem lines="full" detail={true}>
-                                <IonIcon slot="start" ios={documentTextOutline} md={documentTextSharp}/>
-                                <IonLabel>Анкеты</IonLabel>
-                            </IonItem>
-                        </IonRouterLink>
-                    </IonMenuToggle>
-                    <IonMenuToggle hidden={subMenu.Control} autoHide={false}>
-                        <IonRouterLink href="/monitoring">
-                            <IonItem lines="full" detail={true}>
-                                <IonIcon slot="start" ios={cubeOutline} md={cubeSharp}/>
-                                <IonLabel>Объекты</IonLabel>
-                            </IonItem>
-                        </IonRouterLink>
-                    </IonMenuToggle>
-                </IonItemGroup>
-                <IonItemGroup>
-                    <IonItemDivider onClick={() => toggleSubMenu('Users')}>
-                        <IonLabel>Управление Пользователями</IonLabel>
-                        <IonIcon slot="end" color="medium" ios={chevronDownOutline} md={chevronDownSharp}/>
-                    </IonItemDivider>
-                    <IonMenuToggle hidden={subMenu.Users} autoHide={false}>
-                        <IonRouterLink href="/users">
-                            <IonItem lines="full" detail={true}>
-                                <IonIcon slot="start" ios={peopleCircleOutline} md={peopleCircleOutline}/>
-                                <IonLabel>Пользователи</IonLabel>
-                            </IonItem>
-                        </IonRouterLink>
-                    </IonMenuToggle>
-                </IonItemGroup>
-            </IonContent>
-        </IonMenu>
-    );
+  return (
+    <IonMenu side="start" contentId="main-content">
+      <IonHeader>
+        <IonToolbar>
+          <IonTitle>
+            CRM Строй
+            {role && (
+              <span style={{ fontSize: '0.75rem', marginLeft: 8, opacity: 0.8 }}>
+                ({ROLE_LABELS[role]})
+              </span>
+            )}
+          </IonTitle>
+        </IonToolbar>
+      </IonHeader>
+      <IonContent className="ion-no-padding">
+        <IonItemGroup>
+          <IonItemDivider onClick={() => toggleSubMenu('objects')}>
+            <IonLabel>Объекты строительства</IonLabel>
+            <IonIcon slot="end" color="medium" ios={chevronDownOutline} md={chevronDownSharp} />
+          </IonItemDivider>
+          <IonMenuToggle hidden={subMenu.objects} autoHide={false}>
+            <IonRouterLink href="/projects">
+              <IonItem lines="full" detail>
+                <IonIcon slot="start" ios={homeOutline} md={homeOutline} />
+                <IonLabel>Объекты</IonLabel>
+              </IonItem>
+            </IonRouterLink>
+          </IonMenuToggle>
+        </IonItemGroup>
+        <IonItemGroup>
+          <IonItemDivider onClick={() => toggleSubMenu('docs')}>
+            <IonLabel>Документооборот</IonLabel>
+            <IonIcon slot="end" color="medium" ios={chevronDownOutline} md={chevronDownSharp} />
+          </IonItemDivider>
+          <IonMenuToggle hidden={subMenu.docs} autoHide={false}>
+            <IonRouterLink href="/documents">
+              <IonItem lines="full" detail>
+                <IonIcon slot="start" ios={documentTextOutline} md={documentTextSharp} />
+                <IonLabel>Документы</IonLabel>
+              </IonItem>
+            </IonRouterLink>
+          </IonMenuToggle>
+        </IonItemGroup>
+        <IonItemGroup>
+          <IonItemDivider onClick={() => toggleSubMenu('plan')}>
+            <IonLabel>Планирование</IonLabel>
+            <IonIcon slot="end" color="medium" ios={chevronDownOutline} md={chevronDownSharp} />
+          </IonItemDivider>
+          <IonMenuToggle hidden={subMenu.plan} autoHide={false}>
+            <IonRouterLink href="/calendar">
+              <IonItem lines="full" detail>
+                <IonIcon slot="start" ios={calendarOutline} md={calendarOutline} />
+                <IonLabel>Календарь</IonLabel>
+              </IonItem>
+            </IonRouterLink>
+          </IonMenuToggle>
+          <IonMenuToggle hidden={subMenu.plan} autoHide={false}>
+            <IonRouterLink href="/reports">
+              <IonItem lines="full" detail>
+                <IonIcon slot="start" ios={barChartOutline} md={barChartOutline} />
+                <IonLabel>Отчёты</IonLabel>
+              </IonItem>
+            </IonRouterLink>
+          </IonMenuToggle>
+        </IonItemGroup>
+        <IonItemGroup>
+          <IonItemDivider onClick={() => toggleSubMenu('users')}>
+            <IonLabel>Управление</IonLabel>
+            <IonIcon slot="end" color="medium" ios={chevronDownOutline} md={chevronDownSharp} />
+          </IonItemDivider>
+          {canSeeUsers(role) && (
+            <IonMenuToggle hidden={subMenu.users} autoHide={false}>
+              <IonRouterLink href="/users">
+                <IonItem lines="full" detail>
+                  <IonIcon slot="start" ios={peopleCircleOutline} md={peopleCircleOutline} />
+                  <IonLabel>Пользователи</IonLabel>
+                </IonItem>
+              </IonRouterLink>
+            </IonMenuToggle>
+          )}
+        </IonItemGroup>
+      </IonContent>
+    </IonMenu>
+  );
 };
 
 export default Menu;

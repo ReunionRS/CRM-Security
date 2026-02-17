@@ -12,10 +12,8 @@ import {
 } from "@ionic/react";
 import {addOutline} from "ionicons/icons";
 import React, {useState} from "react";
-import FormCreate from "../firebase/FormCreate";
-import LocationCreate from "../firebase/LocationCreate";
-import SignUp from "./Signup";
 import UserCreate from "../firebase/UserCreate";
+import ProjectCreate from "../firebase/ProjectCreate";
 
 
 const FabModal: React.FC = () => {
@@ -33,27 +31,23 @@ const FabModal: React.FC = () => {
                 </IonHeader>
                 <IonContent className="ion-padding">
                     {(() => {
-                        if (window.location.pathname == '/forms') {
-                            return (
-                                <FormCreate></FormCreate>
-                            )
-                        } else if (window.location.pathname == '/monitoring') {
-                            return (
-                                <LocationCreate></LocationCreate>
-                            )
-                        } else {
-                            return (
-                                <UserCreate></UserCreate>
-                            )
+                        if (window.location.pathname === '/projects') {
+                            return <ProjectCreate />;
                         }
+                        if (window.location.pathname === '/users') {
+                            return <UserCreate />;
+                        }
+                        return null;
                     })()}
                 </IonContent>
             </IonModal>
-            <IonFab slot="fixed" vertical="bottom" horizontal="end">
-                <IonFabButton onClick={() => setIsOpen(true)}>
-                    <IonIcon icon={addOutline}></IonIcon>
-                </IonFabButton>
-            </IonFab>
+            {(['/projects', '/users'].includes(window.location.pathname)) && (
+                <IonFab slot="fixed" vertical="bottom" horizontal="end">
+                    <IonFabButton onClick={() => setIsOpen(true)}>
+                        <IonIcon icon={addOutline}></IonIcon>
+                    </IonFabButton>
+                </IonFab>
+            )}
         </>
     );
 };

@@ -2,14 +2,12 @@ import {IonButton, IonButtons, IonIcon} from "@ionic/react";
 import {logOutOutline} from "ionicons/icons";
 import React, {useEffect, useState} from "react";
 import {onAuthStateChanged, signOut} from "firebase/auth";
-import {auth} from "../firebase/Firebase";
-import {useHistory} from "react-router";
-
-
+import { auth } from '../firebase/Firebase';
+import { useHistory } from 'react-router';
+import type { User } from 'firebase/auth';
 
 const LogOut: React.FC = () => {
-
-    const [authUser, setAuthUser] = useState(null);
+    const [authUser, setAuthUser] = useState<User | null>(null);
 
     const history = useHistory();
 

@@ -2,6 +2,8 @@
     display: flex;
     flex-direction: row;
     justify-content: center;
+    align-items: center;
+    gap: 8px;
 }
 
 .logo-title img {
@@ -20,4 +22,60 @@ ion-col {
 
 .activities {
     width: 20%;
+}
+
+/* Строительная CRM: объекты и этапы */
+.project-list {
+    padding: 12px;
+}
+
+.project-card {
+    margin-bottom: 16px;
+}
+
+.project-card .card-icon {
+    margin-right: 8px;
+    vertical-align: middle;
+}
+
+.project-meta {
+    --padding-start: 0;
+    --inner-padding-end: 0;
+}
+
+.project-progress {
+    margin: 12px 0;
+}
+
+.project-progress ion-label {
+    display: block;
+    margin-bottom: 6px;
+    font-size: 0.9rem;
+}
+
+.progress-bar {
+    height: 8px;
+    background: var(--ion-color-light);
+    border-radius: 4px;
+    overflow: hidden;
+}
+
+.progress-fill {
+    height: 100%;
+    background: var(--ion-color-primary);
+    border-radius: 4px;
+    transition: width 0.3s ease;
+}
+
+.project-dates {
+    display: flex;
+    gap: 16px;
+    font-size: 0.85rem;
+    color: var(--ion-color-medium);
+    margin-bottom: 8px;
+}
+
+.stage-overdue {
+    --background: rgba(var(--ion-color-danger-rgb), 0.12);
+    border-left: 4px solid var(--ion-color-danger);
 }

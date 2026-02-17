@@ -19,7 +19,7 @@ const Login = () => {
         signInWithEmailAndPassword(auth, email, password)
             .then((userCredential) => {
                 console.log(userCredential);
-                history.push('/monitoring');
+                history.push('/projects');
             })
             .catch((error) => {
                 console.log(error);
@@ -39,7 +39,7 @@ const Login = () => {
         <IonCard className="auth">
             <form className="ion-margin" onSubmit={SignIn}>
                 <IonCardHeader>
-                    <IonTitle color="primary" className="ion-text-center">CRM-Security</IonTitle>
+                    <IonTitle color="primary" className="ion-text-center">CRM Строй</IonTitle>
                 </IonCardHeader>
                 <IonList>
                     <IonItem>
