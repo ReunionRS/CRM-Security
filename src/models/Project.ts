@@ -38,14 +38,21 @@ export interface Project {
   id?: string;
   clientFio: string;
   clientContacts: string;
+  clientUserId?: string; // uid пользователя-клиента
   constructionAddress: string;
   projectType: ProjectType;
   areaSqm: number;
   estimatedCost: number;
+   // Финансы
+  contractAmount?: number; // сумма договора
+  paidAmount?: number;     // всего оплачено
+  nextPaymentDate?: string; // дата следующего платежа
+  lastPaymentDate?: string; // дата последнего платежа
   status: ProjectStatus;
   startDate: string;
   plannedEndDate: string;
   actualEndDate?: string;
+  cameraUrl?: string; // HTTP/HLS/RTSP URL камеры
   stages?: ProjectStage[];
   createdAt?: string;
   updatedAt?: string;

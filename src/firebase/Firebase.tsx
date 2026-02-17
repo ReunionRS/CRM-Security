@@ -1,5 +1,5 @@
 import { initializeApp } from "firebase/app";
-import { getAuth, onAuthStateChanged } from "firebase/auth";
+import { getAuth } from "firebase/auth";
 import 'firebase/compat/auth';
 import 'firebase/compat/firestore';
 import { getFirestore } from 'firebase/firestore';
@@ -20,3 +20,7 @@ const app = initializeApp(firebaseConfig);
 export const auth = getAuth(app);
 export const firestoreBase = getFirestore(app);
 export const storage = getStorage(app);
+
+// Второе приложение только для административных операций (создание пользователей)
+const adminApp = initializeApp(firebaseConfig, "admin-helper");
+export const adminAuth = getAuth(adminApp);

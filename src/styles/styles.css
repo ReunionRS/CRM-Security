@@ -79,3 +79,41 @@ ion-col {
     --background: rgba(var(--ion-color-danger-rgb), 0.12);
     border-left: 4px solid var(--ion-color-danger);
 }
+
+/* Gantt по этапам */
+.gantt-container {
+    margin-top: 16px;
+    border-radius: 8px;
+    padding: 8px;
+    background: var(--ion-color-light);
+    overflow-x: auto;
+}
+
+.gantt-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 6px;
+    font-size: 0.8rem;
+}
+
+.gantt-row-label {
+    min-width: 120px;
+}
+
+.gantt-bar-track {
+    position: relative;
+    flex: 1;
+    height: 12px;
+    background: rgba(0,0,0,0.06);
+    border-radius: 6px;
+    overflow: hidden;
+}
+
+.gantt-bar {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    background: var(--ion-color-primary);
+    border-radius: 6px;
+}

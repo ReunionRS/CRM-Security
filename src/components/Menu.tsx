@@ -28,7 +28,7 @@ import { ROLE_LABELS, type UserRole } from '../models/Roles';
 
 const Menu: React.FC = () => {
   const [subMenu, setSubMenu] = useState<Record<string, boolean>>({});
-  const { role } = useAuth();
+  const { role, loading } = useAuth();
 
   const toggleSubMenu = (key: string) => {
     setSubMenu((prev) => ({ ...prev, [key]: !prev[key] }));
@@ -65,6 +65,7 @@ const Menu: React.FC = () => {
             </IonRouterLink>
           </IonMenuToggle>
         </IonItemGroup>
+        {/* Документы доступны всем ролям, включая клиентов */}
         <IonItemGroup>
           <IonItemDivider onClick={() => toggleSubMenu('docs')}>
             <IonLabel>Документооборот</IonLabel>
@@ -79,44 +80,51 @@ const Menu: React.FC = () => {
             </IonRouterLink>
           </IonMenuToggle>
         </IonItemGroup>
-        <IonItemGroup>
-          <IonItemDivider onClick={() => toggleSubMenu('plan')}>
-            <IonLabel>Планирование</IonLabel>
-            <IonIcon slot="end" color="medium" ios={chevronDownOutline} md={chevronDownSharp} />
-          </IonItemDivider>
-          <IonMenuToggle hidden={subMenu.plan} autoHide={false}>
-            <IonRouterLink href="/calendar">
-              <IonItem lines="full" detail>
-                <IonIcon slot="start" ios={calendarOutline} md={calendarOutline} />
-                <IonLabel>Календарь</IonLabel>
-              </IonItem>
-            </IonRouterLink>
-          </IonMenuToggle>
-          <IonMenuToggle hidden={subMenu.plan} autoHide={false}>
-            <IonRouterLink href="/reports">
-              <IonItem lines="full" detail>
-                <IonIcon slot="start" ios={barChartOutline} md={barChartOutline} />
-                <IonLabel>Отчёты</IonLabel>
-              </IonItem>
-            </IonRouterLink>
-          </IonMenuToggle>
-        </IonItemGroup>
-        <IonItemGroup>
-          <IonItemDivider onClick={() => toggleSubMenu('users')}>
-            <IonLabel>Управление</IonLabel>
-            <IonIcon slot="end" color="medium" ios={chevronDownOutline} md={chevronDownSharp} />
-          </IonItemDivider>
-          {canSeeUsers(role) && (
-            <IonMenuToggle hidden={subMenu.users} autoHide={false}>
-              <IonRouterLink href="/users">
+
+        {/* Планирование и отчёты скрываем для клиентов */}
+        {role !== 'client' && (
+          <IonItemGroup>
+            <IonItemDivider onClick={() => toggleSubMenu('plan')}>
+              <IonLabel>Планирование</IonLabel>
+              <IonIcon slot="end" color="medium" ios={chevronDownOutline} md={chevronDownSharp} />
+            </IonItemDivider>
+            <IonMenuToggle hidden={subMenu.plan} autoHide={false}>
+              <IonRouterLink href="/calendar">
                 <IonItem lines="full" detail>
-                  <IonIcon slot="start" ios={peopleCircleOutline} md={peopleCircleOutline} />
-                  <IonLabel>Пользователи</IonLabel>
+                  <IonIcon slot="start" ios={calendarOutline} md={calendarOutline} />
+                  <IonLabel>Календарь</IonLabel>
                 </IonItem>
               </IonRouterLink>
             </IonMenuToggle>
-          )}
-        </IonItemGroup>
+            <IonMenuToggle hidden={subMenu.plan} autoHide={false}>
+              <IonRouterLink href="/reports">
+                <IonItem lines="full" detail>
+                  <IonIcon slot="start" ios={barChartOutline} md={barChartOutline} />
+                  <IonLabel>Отчёты</IonLabel>
+                </IonItem>
+              </IonRouterLink>
+            </IonMenuToggle>
+          </IonItemGroup>
+        )}
+        {/* Управление пользователями скрыто для клиентов */}
+        {role !== 'client' && (
+          <IonItemGroup>
+            <IonItemDivider onClick={() => toggleSubMenu('users')}>
+              <IonLabel>Управление</IonLabel>
+              <IonIcon slot="end" color="medium" ios={chevronDownOutline} md={chevronDownSharp} />
+            </IonItemDivider>
+            <IonMenuToggle hidden={subMenu.users} autoHide={false}>
+              <IonRouterLink href="/users">
+                <IonItem lines="full" detail disabled={!loading && !canSeeUsers(role)}>
+                  <IonIcon slot="start" ios={peopleCircleOutline} md={peopleCircleOutline} />
+                  <IonLabel>
+                    Пользователи{!loading && !canSeeUsers(role) ? ' (нет доступа)' : ''}
+                  </IonLabel>
+                </IonItem>
+              </IonRouterLink>
+            </IonMenuToggle>
+          </IonItemGroup>
+        )}
       </IonContent>
     </IonMenu>
   );

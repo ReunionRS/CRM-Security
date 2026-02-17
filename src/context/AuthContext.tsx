@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import type { User as FirebaseUser } from 'firebase/auth';
 import { auth, firestoreBase } from '../firebase/Firebase';
-import { collection, getDocs, query, where } from 'firebase/firestore';
+import { addDoc, collection, getDocs, query, where } from 'firebase/firestore';
 import type { UserRole } from '../models/Roles';
 import { DEFAULT_ROLE } from '../models/Roles';
 
@@ -39,7 +39,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           const data = snap.docs[0].data() as { role?: UserRole };
           setRole(data.role ?? DEFAULT_ROLE);
         } else {
-          setRole(DEFAULT_ROLE);
+          // Bootstrap: если это известный админ, создаём запись и даём роль admin
+          if ((u.email || '').toLowerCase() === 'admin@admin.ru') {
+            await addDoc(usersColl, {
+              email: u.email,
+              fio: 'Администратор',
+              role: 'admin' as UserRole,
+              uid: u.uid,
+            });
+            setRole('admin');
+          } else {
+            setRole(DEFAULT_ROLE);
+          }
         }
       } catch {
         setRole(DEFAULT_ROLE);

@@ -1,7 +1,7 @@
 import { createUserWithEmailAndPassword } from 'firebase/auth';
 import { addDoc, collection } from 'firebase/firestore';
 import React, { useState } from 'react';
-import { auth, firestoreBase } from './Firebase';
+import { adminAuth, firestoreBase } from './Firebase';
 import { User } from '../models/User';
 import { IonButton, IonInput, IonItem, IonLabel, IonSelect, IonSelectOption, useIonToast } from '@ionic/react';
 import { ROLE_LABELS, type UserRole } from '../models/Roles';
@@ -31,7 +31,7 @@ const UserCreate: React.FC = () => {
 
   const SignUp = (e: { preventDefault: () => void }) => {
     e.preventDefault();
-    createUserWithEmailAndPassword(auth, email, password)
+    createUserWithEmailAndPassword(adminAuth, email, password)
       .then(async () => {
         try {
           const newUser = new User(fio, email, role);

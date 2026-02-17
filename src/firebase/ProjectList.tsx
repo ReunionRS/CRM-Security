@@ -15,6 +15,7 @@ import {
 } from '@ionic/react';
 import { useHistory } from 'react-router-dom';
 import { locationOutline, personOutline } from 'ionicons/icons';
+import { useAuth } from '../context/AuthContext';
 
 const STATUS_LABELS: Record<string, string> = {
   draft: 'Черновик',
@@ -28,6 +29,7 @@ const ProjectList: React.FC = () => {
   const [projects, setProjects] = useState<Project[]>([]);
   const history = useHistory();
   const coll = collection(firestoreBase, 'projects');
+  const { user, role } = useAuth();
 
   const getData = async () => {
     const snap = await getDocs(coll);
@@ -66,9 +68,23 @@ const ProjectList: React.FC = () => {
   const progressPercent = (p: Project) =>
     totalStages ? Math.round((completedCount(p) / totalStages) * 100) : 0;
 
+  const debt = (p: Project) =>
+    Math.max((p.contractAmount ?? 0) - (p.paidAmount ?? 0), 0);
+
+  const isPaymentOverdue = (p: Project) => {
+    if (!debt(p)) return false;
+    if (!p.nextPaymentDate) return false;
+    return new Date(p.nextPaymentDate) < new Date();
+  };
+
+  const visibleProjects =
+    role === 'client' && user
+      ? projects.filter((p) => p.clientUserId === user.uid)
+      : projects;
+
   return (
     <div className="project-list">
-      {projects.map((project) => (
+      {visibleProjects.map((project) => (
         <IonCard
           key={project.id}
           button
@@ -83,6 +99,11 @@ const ProjectList: React.FC = () => {
             <IonChip color={project.status === 'completed' ? 'success' : 'primary'}>
               {STATUS_LABELS[project.status] || project.status}
             </IonChip>
+            {debt(project) > 0 && (
+              <IonChip color={isPaymentOverdue(project) ? 'danger' : 'warning'}>
+                Долг: {debt(project).toLocaleString('ru-RU')} ₽
+              </IonChip>
+            )}
           </IonCardHeader>
           <IonCardContent>
             <IonItem lines="none" className="project-meta">

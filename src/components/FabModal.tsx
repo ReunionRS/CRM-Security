@@ -14,10 +14,14 @@ import {addOutline} from "ionicons/icons";
 import React, {useState} from "react";
 import UserCreate from "../firebase/UserCreate";
 import ProjectCreate from "../firebase/ProjectCreate";
+import { useAuth } from "../context/AuthContext";
 
 
 const FabModal: React.FC = () => {
     const [isOpen, setIsOpen] = useState(false);
+    const { role, loading } = useAuth();
+    const canManageUsers = loading || role === 'admin' || role === 'director';
+    const canCreateProjects = loading || role === 'admin' || role === 'director' || role === 'manager' || role === 'foreman';
     return (
         <>
             <IonModal isOpen={isOpen}>
@@ -32,10 +36,22 @@ const FabModal: React.FC = () => {
                 <IonContent className="ion-padding">
                     {(() => {
                         if (window.location.pathname === '/projects') {
-                            return <ProjectCreate />;
+                            return canCreateProjects ? (
+                                <ProjectCreate />
+                            ) : (
+                                <div className="ion-text-center ion-padding">
+                                    Нет доступа к созданию объектов.
+                                </div>
+                            );
                         }
                         if (window.location.pathname === '/users') {
-                            return <UserCreate />;
+                            return canManageUsers ? (
+                                <UserCreate />
+                            ) : (
+                                <div className="ion-text-center ion-padding">
+                                    Нет доступа к созданию пользователей.
+                                </div>
+                            );
                         }
                         return null;
                     })()}

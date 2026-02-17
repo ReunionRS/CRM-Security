@@ -21,8 +21,12 @@ import {
   IonItem,
   IonSelect,
   IonSelectOption,
+  IonInput,
+  IonButton,
+  useIonToast,
 } from '@ionic/react';
 import '../styles/styles.css';
+import { useAuth } from '../context/AuthContext';
 
 const STAGE_STATUS_LABELS: Record<StageStatus, string> = {
   not_started: 'Не начат',
@@ -65,6 +69,13 @@ const ProjectDetail: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const [project, setProject] = useState<Project | null>(null);
   const [stages, setStages] = useState<ProjectStage[]>([]);
+  const [present] = useIonToast();
+  const { role } = useAuth();
+
+  const [contractAmount, setContractAmount] = useState<number>(0);
+  const [paidAmount, setPaidAmount] = useState<number>(0);
+  const [nextPaymentDate, setNextPaymentDate] = useState<string>('');
+  const [lastPaymentDate, setLastPaymentDate] = useState<string>('');
 
   useEffect(() => {
     if (!id) return;
@@ -75,6 +86,10 @@ const ProjectDetail: React.FC = () => {
         const data = { ...snap.data(), id: snap.id } as Project;
         setProject(data);
         setStages(ensureStages(data));
+        setContractAmount(data.contractAmount ?? 0);
+        setPaidAmount(data.paidAmount ?? 0);
+        setNextPaymentDate(data.nextPaymentDate ?? '');
+        setLastPaymentDate(data.lastPaymentDate ?? '');
       }
     };
     load();
@@ -101,6 +116,68 @@ const ProjectDetail: React.FC = () => {
   const progressPercent = CONSTRUCTION_STAGES.length
     ? Math.round((completedCount / CONSTRUCTION_STAGES.length) * 100)
     : 0;
+
+  // Для Gantt: находим общий диапазон дат по этапам
+  const parsedStages = stages
+    .map((s) => ({
+      ...s,
+      start: s.plannedStart ? new Date(s.plannedStart) : null,
+      end: s.plannedEnd ? new Date(s.plannedEnd) : null,
+    }))
+    .filter((s) => s.start && s.end) as Array<ProjectStage & { start: Date; end: Date }>;
+
+  const timeRanges = parsedStages.map((s) => ({
+    startMs: s.start.getTime(),
+    endMs: s.end.getTime(),
+  }));
+
+  const minTime =
+    timeRanges.length > 0 ? Math.min(...timeRanges.map((t) => t.startMs)) : null;
+  const maxTime =
+    timeRanges.length > 0 ? Math.max(...timeRanges.map((t) => t.endMs)) : null;
+
+  const totalMs =
+    minTime !== null && maxTime !== null ? maxTime - minTime || 1 : 1;
+
+  const debt = Math.max((project?.contractAmount ?? contractAmount) - (project?.paidAmount ?? paidAmount), 0);
+  const paidPercent =
+    (project?.contractAmount ?? contractAmount) > 0
+      ? Math.round(
+          ((project?.paidAmount ?? paidAmount) / (project?.contractAmount ?? contractAmount)) * 100
+        )
+      : 0;
+
+  const isPaymentOverdue =
+    debt > 0 &&
+    (project?.nextPaymentDate ?? nextPaymentDate) &&
+    new Date(project?.nextPaymentDate ?? nextPaymentDate) < new Date();
+
+  const canEditFinance =
+    role === 'admin' || role === 'director' || role === 'accountant' || role === 'manager';
+
+  const handleSaveFinance = async () => {
+    if (!id) return;
+    const ref = doc(firestoreBase, 'projects', id);
+    await updateDoc(ref, {
+      contractAmount,
+      paidAmount,
+      nextPaymentDate: nextPaymentDate || null,
+      lastPaymentDate: lastPaymentDate || null,
+      updatedAt: new Date().toISOString(),
+    });
+    setProject((prev) =>
+      prev
+        ? {
+            ...prev,
+            contractAmount,
+            paidAmount,
+            nextPaymentDate,
+            lastPaymentDate,
+          }
+        : prev
+    );
+    present({ message: 'Финансы обновлены', duration: 2000, position: 'bottom', color: 'success' });
+  };
 
   if (!project) {
     return (
@@ -143,6 +220,117 @@ const ProjectDetail: React.FC = () => {
                 <div className="progress-fill" style={{ width: `${progressPercent}%` }} />
               </div>
             </div>
+
+            {project.cameraUrl && (
+              <div className="ion-margin-top">
+                <h3>Камера объекта</h3>
+                {project.cameraUrl.startsWith('http') ? (
+                  <>
+                    <video
+                      controls
+                      style={{ width: '100%', maxHeight: 320, background: '#000' }}
+                      src={project.cameraUrl}
+                    >
+                      Ваш браузер не поддерживает воспроизведение этого формата.
+                    </video>
+                    <p style={{ fontSize: '0.8rem', opacity: 0.8 }}>
+                      Ожидается HTTP/HLS поток (например, прокси для RTSP).
+                    </p>
+                  </>
+                ) : (
+                  <>
+                    <p>
+                      Поток камеры: <a href={project.cameraUrl}>{project.cameraUrl}</a>
+                    </p>
+                    <p style={{ fontSize: '0.8rem', opacity: 0.8 }}>
+                      Для RTSP-потоков используйте внешний плеер (VLC, NVR или прокси в HLS).
+                    </p>
+                  </>
+                )}
+              </div>
+            )}
+          </IonCardContent>
+        </IonCard>
+
+        <IonCard>
+          <IonCardHeader>
+            <IonCardTitle>Финансы</IonCardTitle>
+          </IonCardHeader>
+          <IonCardContent>
+            <p>
+              <strong>Сумма договора:</strong>{' '}
+              {(project.contractAmount ?? contractAmount)?.toLocaleString('ru-RU') || 0} ₽
+            </p>
+            <p>
+              <strong>Оплачено:</strong>{' '}
+              {(project.paidAmount ?? paidAmount)?.toLocaleString('ru-RU') || '0'} ₽ (
+              {paidPercent}%)
+            </p>
+            <p>
+              <strong>Задолженность:</strong> {debt.toLocaleString('ru-RU')} ₽
+            </p>
+            <p>
+              <strong>Дата последнего платежа:</strong>{' '}
+              {(project.lastPaymentDate ?? lastPaymentDate) || '—'}
+            </p>
+            <p>
+              <strong>Дата следующего платежа:</strong>{' '}
+              {(project.nextPaymentDate ?? nextPaymentDate) || '—'}
+            </p>
+
+            <div className="ion-margin-vertical">
+              {debt === 0 ? (
+                <IonChip color="success">Оплачено</IonChip>
+              ) : isPaymentOverdue ? (
+                <IonChip color="danger">Просрочка платежа</IonChip>
+              ) : (
+                <IonChip color="warning">Есть задолженность</IonChip>
+              )}
+            </div>
+
+            {canEditFinance && (
+              <>
+                <IonItem>
+                  <IonInput
+                    label="Сумма договора (₽)"
+                    labelPlacement="floating"
+                    type="number"
+                    value={contractAmount}
+                    onIonInput={(e) => setContractAmount(Number(e.detail.value ?? 0))}
+                  />
+                </IonItem>
+                <IonItem>
+                  <IonInput
+                    label="Оплачено (₽)"
+                    labelPlacement="floating"
+                    type="number"
+                    value={paidAmount}
+                    onIonInput={(e) => setPaidAmount(Number(e.detail.value ?? 0))}
+                  />
+                </IonItem>
+                <IonItem>
+                  <IonInput
+                    label="Дата следующего платежа"
+                    labelPlacement="floating"
+                    type="date"
+                    value={nextPaymentDate}
+                    onIonInput={(e) => setNextPaymentDate(String(e.detail.value ?? ''))}
+                  />
+                </IonItem>
+                <IonItem>
+                  <IonInput
+                    label="Дата последнего платежа"
+                    labelPlacement="floating"
+                    type="date"
+                    value={lastPaymentDate}
+                    onIonInput={(e) => setLastPaymentDate(String(e.detail.value ?? ''))}
+                  />
+                </IonItem>
+                <IonButton className="ion-margin-top" expand="block" onClick={handleSaveFinance}>
+                  Сохранить финансы
+                </IonButton>
+              </>
+            )}
           </IonCardContent>
         </IonCard>
 
@@ -183,6 +371,33 @@ const ProjectDetail: React.FC = () => {
                 );
               })}
             </IonList>
+
+            {parsedStages.length > 0 && minTime !== null && maxTime !== null && (
+              <div className="gantt-container">
+                <IonLabel>
+                  Диаграмма Gantt (плановые даты):{' '}
+                  {new Date(minTime).toLocaleDateString('ru-RU')} –{' '}
+                  {new Date(maxTime).toLocaleDateString('ru-RU')}
+                </IonLabel>
+                {parsedStages.map((s) => {
+                  const startOffset =
+                    ((s.start.getTime() - minTime) / totalMs) * 100;
+                  const width =
+                    ((s.end.getTime() - s.start.getTime()) / totalMs) * 100;
+                  return (
+                    <div key={s.id} className="gantt-row">
+                      <div className="gantt-row-label">{s.name}</div>
+                      <div className="gantt-bar-track">
+                        <div
+                          className="gantt-bar"
+                          style={{ left: `${startOffset}%`, width: `${width}%` }}
+                        />
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </IonCardContent>
         </IonCard>
       </IonContent>

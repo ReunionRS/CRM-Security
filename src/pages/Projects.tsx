@@ -12,8 +12,11 @@ import '../styles/styles.css';
 import LogOut from '../components/LogOut';
 import FabModal from '../components/FabModal';
 import ProjectList from '../firebase/ProjectList';
+import { useAuth } from '../context/AuthContext';
 
 const Projects: React.FC = () => {
+  const { role } = useAuth();
+
   return (
     <IonPage id="main-content">
       <IonContent fullscreen>
@@ -22,7 +25,9 @@ const Projects: React.FC = () => {
             <IonButtons slot="start">
               <IonMenuButton />
             </IonButtons>
-            <IonTitle>CRM Строй — Объекты</IonTitle>
+            <IonTitle>
+              {role === 'client' ? 'Мой дом' : 'CRM Строй — Объекты'}
+            </IonTitle>
             <LogOut />
           </IonToolbar>
         </IonHeader>
