@@ -1,15 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { firestoreBase } from './Firebase';
 import { collection, deleteDoc, doc, getDocs } from 'firebase/firestore';
-import {
-  IonGrid,
-  IonRow,
-  IonCol,
-  IonTitle,
-  IonLabel,
-  IonChip,
-  IonButton,
-} from '@ionic/react';
+import { IonButton, IonIcon, IonChip } from '@ionic/react';
+import { trash } from 'ionicons/icons';
 import type { UserRole } from '../models/Roles';
 import { ROLE_LABELS } from '../models/Roles';
 import { useAuth } from '../context/AuthContext';
@@ -37,61 +30,47 @@ const UserList: React.FC = () => {
     getUsers();
   }, []);
 
+  if (users.length === 0) {
+    return (
+      <div className="no-users">
+        <p>Нет пользователей в системе</p>
+      </div>
+    );
+  }
+
   return (
-    <IonGrid className="ion-padding">
-      <IonRow>
-        <IonCol>
-          <IonTitle color="primary" className="ion-no-padding">
-            ФИО
-          </IonTitle>
-        </IonCol>
-        <IonCol>
-          <IonTitle color="primary" className="ion-no-padding">
-            Email
-          </IonTitle>
-        </IonCol>
-        <IonCol>
-          <IonTitle color="primary" className="ion-no-padding">
-            Роль
-          </IonTitle>
-        </IonCol>
-      </IonRow>
+    <div className="user-cards-grid">
       {users.map((user) => (
-        <IonRow key={user.uid}>
-          <IonCol>
-            <IonLabel>{user.fio ?? '—'}</IonLabel>
-          </IonCol>
-          <IonCol>
-            <IonLabel>{user.email ?? '—'}</IonLabel>
-          </IonCol>
-          <IonCol>
-            {user.role ? (
-              <IonChip color="primary" outline>
-                {ROLE_LABELS[user.role]}
-              </IonChip>
-            ) : (
-              <IonLabel>—</IonLabel>
-            )}
-          </IonCol>
-          <IonCol>
-            {canManageUsers && (
+        <div key={user.uid} className="user-card">
+          <div className="user-card-header">
+            <p className="user-card-name">{user.fio ?? 'Без имени'}</p>
+            <p className="user-card-email">{user.email ?? '—'}</p>
+          </div>
+          {user.role && (
+            <IonChip color="primary" outline className="user-card-role">
+              {ROLE_LABELS[user.role]}
+            </IonChip>
+          )}
+          {canManageUsers && (
+            <div className="user-card-actions">
               <IonButton
                 size="small"
                 color="danger"
-                fill="clear"
+                fill="outline"
                 onClick={async () => {
-                  if (!window.confirm(`Удалить пользователя ${user.email || user.fio || ''}?`)) return;
+                  if (!window.confirm(`Удалить пользователя ${user.email || user.fio || ''}?`))
+                    return;
                   await deleteDoc(doc(firestoreBase, 'users', user.uid));
                   getUsers();
                 }}
               >
-                Удалить
+                <IonIcon slot="icon-only" icon={trash} />
               </IonButton>
-            )}
-          </IonCol>
-        </IonRow>
+            </div>
+          )}
+        </div>
       ))}
-    </IonGrid>
+    </div>
   );
 };
 

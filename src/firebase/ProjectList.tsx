@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { collection, getDocs, doc, deleteDoc } from 'firebase/firestore';
+import { collection, getDocs, doc, deleteDoc, updateDoc } from 'firebase/firestore';
 import { firestoreBase } from './Firebase';
 import { Project, CONSTRUCTION_STAGES } from '../models/Project';
 import {
@@ -12,10 +12,24 @@ import {
   IonLabel,
   IonItem,
   IonIcon,
+  IonModal,
+  IonHeader,
+  IonToolbar,
+  IonTitle,
+  IonContent,
+  IonInput,
+  IonSelect,
+  IonSelectOption,
 } from '@ionic/react';
 import { useHistory } from 'react-router-dom';
-import { locationOutline, personOutline } from 'ionicons/icons';
+import { locationOutline, personOutline, pencil, trash } from 'ionicons/icons';
 import { useAuth } from '../context/AuthContext';
+
+interface UserRecord {
+  uid: string;
+  fio?: string;
+  email?: string;
+}
 
 const STATUS_LABELS: Record<string, string> = {
   draft: 'Черновик',
@@ -27,9 +41,17 @@ const STATUS_LABELS: Record<string, string> = {
 
 const ProjectList: React.FC = () => {
   const [projects, setProjects] = useState<Project[]>([]);
+  const [users, setUsers] = useState<UserRecord[]>([]);
+  const [editingProject, setEditingProject] = useState<Project | null>(null);
+  const [editClientId, setEditClientId] = useState<string>('');
+  const [editFio, setEditFio] = useState<string>('');
+  const [editEmail, setEditEmail] = useState<string>('');
+  const [editAddress, setEditAddress] = useState<string>('');
+  const [editStatus, setEditStatus] = useState<string>('');
   const history = useHistory();
   const coll = collection(firestoreBase, 'projects');
-  const { user, role } = useAuth();
+  const usersCollection = collection(firestoreBase, 'users');
+  const { user, role, firestoreUserId } = useAuth();
 
   const getData = async () => {
     const snap = await getDocs(coll);
@@ -51,14 +73,66 @@ const ProjectList: React.FC = () => {
     );
   };
 
+  const getUsers = async () => {
+    const snap = await getDocs(usersCollection);
+    setUsers(snap.docs.map((d) => ({ ...d.data(), uid: d.id } as UserRecord)));
+  };
+
   useEffect(() => {
     getData();
+    getUsers();
   }, []);
 
   const handleDelete = async (id: string, e: React.MouseEvent) => {
     e.stopPropagation();
     if (!window.confirm('Удалить объект?')) return;
     await deleteDoc(doc(firestoreBase, 'projects', id));
+    getData();
+  };
+
+  const handleEditClick = (project: Project, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setEditingProject(project);
+    setEditClientId(project.clientUserId || '');
+    setEditFio(project.clientFio || '');
+    setEditEmail(project.clientEmail || '');
+    setEditAddress(project.constructionAddress || '');
+    setEditStatus(project.status || 'draft');
+  };
+
+  const handleSaveEdit = async () => {
+    if (!editingProject?.id) return;
+
+    let finalClientId = editClientId;
+    
+    // Автомотчинг: если вбили ФИО существующего клиента, но не выбрали из списка
+    if (!finalClientId && editFio) {
+      const matchedUser = users.find(
+        (u) => u.fio?.toLowerCase() === editFio.toLowerCase()
+      );
+      if (matchedUser) {
+        finalClientId = matchedUser.uid;
+      }
+    }
+
+    // Если выбран клиент из списка, берём его данные
+    if (finalClientId && finalClientId !== editClientId) {
+      const selectedUser = users.find((u) => u.uid === finalClientId);
+      if (selectedUser) {
+        setEditFio(selectedUser.fio || editFio);
+        setEditEmail(selectedUser.email || editEmail);
+      }
+    }
+
+    await updateDoc(doc(firestoreBase, 'projects', editingProject.id), {
+      clientUserId: finalClientId,
+      clientFio: editFio,
+      clientEmail: editEmail,
+      constructionAddress: editAddress,
+      status: editStatus,
+    });
+
+    setEditingProject(null);
     getData();
   };
 
@@ -78,8 +152,8 @@ const ProjectList: React.FC = () => {
   };
 
   const visibleProjects =
-    role === 'client' && user
-      ? projects.filter((p) => p.clientUserId === user.uid)
+    role === 'client' && firestoreUserId
+      ? projects.filter((p) => p.clientUserId === firestoreUserId)
       : projects;
 
   return (
@@ -123,17 +197,110 @@ const ProjectList: React.FC = () => {
               <span>Начало: {project.startDate || '—'}</span>
               <span>План сдачи: {project.plannedEndDate || '—'}</span>
             </div>
-            <IonButton
-              color="danger"
-              fill="clear"
-              size="small"
-              onClick={(e) => project.id && handleDelete(project.id, e)}
-            >
-              Удалить
-            </IonButton>
+            <div style={{ display: 'flex', gap: '8px', marginTop: '12px' }}>
+              {role !== 'client' && (
+                <IonButton
+                  color="primary"
+                  fill="clear"
+                  size="small"
+                  onClick={(e) => handleEditClick(project, e)}
+                >
+                  <IonIcon slot="icon-only" icon={pencil} />
+                </IonButton>
+              )}
+              {role !== 'client' && (
+                <IonButton
+                  color="danger"
+                  fill="clear"
+                  size="small"
+                  onClick={(e) => project.id && handleDelete(project.id, e)}
+                >
+                  <IonIcon slot="icon-only" icon={trash} />
+                </IonButton>
+              )}
+            </div>
           </IonCardContent>
         </IonCard>
       ))}
+
+      <IonModal isOpen={!!editingProject} onDidDismiss={() => setEditingProject(null)}>
+        <IonHeader>
+          <IonToolbar>
+            <IonTitle>Редактировать объект</IonTitle>
+            <IonButton
+              slot="end"
+              fill="clear"
+              onClick={() => setEditingProject(null)}
+            >
+              Закрыть
+            </IonButton>
+          </IonToolbar>
+        </IonHeader>
+        <IonContent className="ion-padding">
+          <div className="edit-form-group">
+            <label className="edit-form-label">Клиент</label>
+            <IonSelect value={editClientId} onIonChange={(e) => {
+              const selectedId = e.detail.value;
+              setEditClientId(selectedId);
+              const selectedUser = users.find((u) => u.uid === selectedId);
+              if (selectedUser) {
+                setEditFio(selectedUser.fio || '');
+                setEditEmail(selectedUser.email || '');
+              }
+            }}>
+              <IonSelectOption value="">Нет привязки</IonSelectOption>
+              {users.map((u) => (
+                <IonSelectOption key={u.uid} value={u.uid}>
+                  {u.fio} ({u.email})
+                </IonSelectOption>
+              ))}
+            </IonSelect>
+          </div>
+
+          <div className="edit-form-group">
+            <label className="edit-form-label">ФИО Клиента</label>
+            <IonInput
+              value={editFio}
+              onIonChange={(e) => setEditFio(e.detail.value || '')}
+              placeholder="Введите ФИО"
+            />
+          </div>
+
+          <div className="edit-form-group">
+            <label className="edit-form-label">Email</label>
+            <IonInput
+              value={editEmail}
+              onIonChange={(e) => setEditEmail(e.detail.value || '')}
+              placeholder="Введите email"
+              type="email"
+            />
+          </div>
+
+          <div className="edit-form-group">
+            <label className="edit-form-label">Адрес</label>
+            <IonInput
+              value={editAddress}
+              onIonChange={(e) => setEditAddress(e.detail.value || '')}
+              placeholder="Введите адрес"
+            />
+          </div>
+
+          <div className="edit-form-group">
+            <label className="edit-form-label">Статус</label>
+            <IonSelect value={editStatus} onIonChange={(e) => setEditStatus(e.detail.value)}>
+              <IonSelectOption value="draft">Черновик</IonSelectOption>
+              <IonSelectOption value="in_progress">В работе</IonSelectOption>
+              <IonSelectOption value="completed">Завершён</IonSelectOption>
+              <IonSelectOption value="on_hold">Приостановлен</IonSelectOption>
+              <IonSelectOption value="cancelled">Отменён</IonSelectOption>
+            </IonSelect>
+          </div>
+
+          <IonButton expand="block" onClick={handleSaveEdit}>
+            Сохранить
+          </IonButton>
+        </IonContent>
+      </IonModal>
     </div>
   );
 };

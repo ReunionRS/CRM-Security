@@ -32,13 +32,14 @@ const UserCreate: React.FC = () => {
   const SignUp = (e: { preventDefault: () => void }) => {
     e.preventDefault();
     createUserWithEmailAndPassword(adminAuth, email, password)
-      .then(async () => {
+      .then(async (userCredential) => {
         try {
           const newUser = new User(fio, email, role);
           const docRef = await addDoc(usersColl, {
             email: newUser.email,
             fio: newUser.fio,
             role: newUser.role,
+            uid: userCredential.user.uid,
           });
           presentToast('bottom', 'Пользователь создан', 'success');
           console.log('User created with ID: ', docRef.id);

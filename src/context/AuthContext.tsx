@@ -9,24 +9,28 @@ interface AuthContextValue {
   user: FirebaseUser | null;
   role: UserRole | null;
   loading: boolean;
+  firestoreUserId: string | null;
 }
 
 const AuthContext = createContext<AuthContextValue>({
   user: null,
   role: null,
   loading: true,
+  firestoreUserId: null,
 });
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<FirebaseUser | null>(null);
   const [role, setRole] = useState<UserRole | null>(null);
   const [loading, setLoading] = useState(true);
+  const [firestoreUserId, setFirestoreUserId] = useState<string | null>(null);
 
   useEffect(() => {
     const unsub = auth.onAuthStateChanged(async (u) => {
       setUser(u);
       if (!u) {
         setRole(null);
+        setFirestoreUserId(null);
         setLoading(false);
         return;
       }
@@ -36,24 +40,29 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         const q = query(usersColl, where('email', '==', u.email || ''));
         const snap = await getDocs(q);
         if (!snap.empty) {
+          const docId = snap.docs[0].id;
           const data = snap.docs[0].data() as { role?: UserRole };
           setRole(data.role ?? DEFAULT_ROLE);
+          setFirestoreUserId(docId);
         } else {
           // Bootstrap: если это известный админ, создаём запись и даём роль admin
           if ((u.email || '').toLowerCase() === 'admin@admin.ru') {
-            await addDoc(usersColl, {
+            const docRef = await addDoc(usersColl, {
               email: u.email,
               fio: 'Администратор',
               role: 'admin' as UserRole,
               uid: u.uid,
             });
             setRole('admin');
+            setFirestoreUserId(docRef.id);
           } else {
             setRole(DEFAULT_ROLE);
+            setFirestoreUserId(null);
           }
         }
       } catch {
         setRole(DEFAULT_ROLE);
+        setFirestoreUserId(null);
       } finally {
         setLoading(false);
       }
@@ -61,7 +70,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return () => unsub();
   }, []);
 
-  return <AuthContext.Provider value={{ user, role, loading }}>{children}</AuthContext.Provider>;
+  return <AuthContext.Provider value={{ user, role, loading, firestoreUserId }}>{children}</AuthContext.Provider>;
 };
 
 export const useAuth = () => useContext(AuthContext);

@@ -64,10 +64,32 @@ const ProjectCreate: React.FC = () => {
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
+      let finalClientUserId = clientUserId;
+      let finalClientFio = clientFio;
+      let finalClientContacts = clientContacts;
+
+      // Если выбран клиент из списка, берём его данные
+      if (clientUserId) {
+        const selectedClient = clients.find((c) => c.id === clientUserId);
+        if (selectedClient) {
+          finalClientFio = selectedClient.fio;
+          finalClientContacts = selectedClient.email || clientContacts;
+        }
+      } else if (clientFio) {
+        // Автомотчинг: если вбили ФИО существующего клиента, но не выбрали из списка
+        const matchedClient = clients.find(
+          (c) => c.fio.toLowerCase() === clientFio.toLowerCase()
+        );
+        if (matchedClient) {
+          finalClientUserId = matchedClient.id;
+          finalClientContacts = matchedClient.email || clientContacts;
+        }
+      }
+
       await addDoc(coll, {
-        clientFio,
-        clientContacts,
-        clientUserId: clientUserId || null,
+        clientFio: finalClientFio,
+        clientContacts: finalClientContacts,
+        clientUserId: finalClientUserId || null,
         constructionAddress,
         projectType,
         areaSqm: Number(areaSqm),

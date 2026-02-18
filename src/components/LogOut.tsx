@@ -38,9 +38,9 @@ const LogOut: React.FC = () => {
     };
 
     return (
-        <IonButtons className="ion-margin-end" slot="end">
-            <IonButton color="danger" fill="solid" onClick={userSignOut}>
-                Выход
+        <IonButtons className="logout-buttons ion-margin-end" slot="end">
+            <IonButton color="danger" fill="solid" onClick={userSignOut} className="logout-button">
+                <span>Выход</span>
                 <IonIcon slot="end" icon={logOutOutline}></IonIcon>
             </IonButton>
         </IonButtons>

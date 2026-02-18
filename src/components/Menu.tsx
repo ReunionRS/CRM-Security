@@ -11,6 +11,7 @@ import {
   IonRouterLink,
   IonTitle,
   IonToolbar,
+  IonButton,
 } from '@ionic/react';
 import {
   chevronDownOutline,
@@ -21,14 +22,35 @@ import {
   peopleCircleOutline,
   calendarOutline,
   barChartOutline,
+  moon,
+  sunny,
 } from 'ionicons/icons';
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { ROLE_LABELS, type UserRole } from '../models/Roles';
 
 const Menu: React.FC = () => {
   const [subMenu, setSubMenu] = useState<Record<string, boolean>>({});
   const { role, loading } = useAuth();
+  const [isDarkMode, setIsDarkMode] = useState(false);
+
+  useEffect(() => {
+    const savedTheme = localStorage.getItem('theme');
+    const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+    const dark = savedTheme ? savedTheme === 'dark' : prefersDark;
+    setIsDarkMode(dark);
+    applyTheme(dark);
+
+    // Add touch support for theme toggle button
+    const themeButton = document.querySelector('.theme-toggle-button');
+    if (themeButton) {
+      const handleTouchStart = (e: Event) => {
+        e.preventDefault();
+      };
+      themeButton.addEventListener('touchstart', handleTouchStart, { passive: false });
+      return () => themeButton.removeEventListener('touchstart', handleTouchStart);
+    }
+  }, []);
 
   const toggleSubMenu = (key: string) => {
     setSubMenu((prev) => ({ ...prev, [key]: !prev[key] }));
@@ -36,18 +58,32 @@ const Menu: React.FC = () => {
 
   const canSeeUsers = (r: UserRole | null) => r === 'admin' || r === 'director';
 
+  const applyTheme = (dark: boolean) => {
+    if (dark) {
+      document.documentElement.classList.add('ion-palette-dark');
+    } else {
+      document.documentElement.classList.remove('ion-palette-dark');
+    }
+    localStorage.setItem('theme', dark ? 'dark' : 'light');
+  };
+
+  const toggleTheme = () => {
+    const newDarkMode = !isDarkMode;
+    setIsDarkMode(newDarkMode);
+    applyTheme(newDarkMode);
+  };
+
   return (
     <IonMenu side="start" contentId="main-content">
       <IonHeader>
         <IonToolbar>
-          <IonTitle>
-            CRM Строй
-            {role && (
-              <span style={{ fontSize: '0.75rem', marginLeft: 8, opacity: 0.8 }}>
-                ({ROLE_LABELS[role]})
-              </span>
-            )}
-          </IonTitle>
+          <div slot="start" className="menu-header">
+            <img src="/img/logo.png" alt="Logo" className="menu-logo" />
+            <div className="menu-title">
+              <h2>CRM Строй</h2>
+              {role && <span className="menu-role">{ROLE_LABELS[role]}</span>}
+            </div>
+          </div>
         </IonToolbar>
       </IonHeader>
       <IonContent className="ion-no-padding">
@@ -126,6 +162,19 @@ const Menu: React.FC = () => {
           </IonItemGroup>
         )}
       </IonContent>
+      <div className="menu-footer">
+        <IonButton 
+          fill="solid" 
+          expand="block" 
+          color="primary" 
+          onClick={toggleTheme}
+          type="button"
+          className="theme-toggle-button"
+        >
+          <IonIcon slot="start" icon={isDarkMode ? sunny : moon} />
+          <span>{isDarkMode ? 'Светлая тема' : 'Тёмная тема'}</span>
+        </IonButton>
+      </div>
     </IonMenu>
   );
 };
