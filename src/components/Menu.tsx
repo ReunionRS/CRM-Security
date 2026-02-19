@@ -40,16 +40,6 @@ const Menu: React.FC = () => {
     const dark = savedTheme ? savedTheme === 'dark' : prefersDark;
     setIsDarkMode(dark);
     applyTheme(dark);
-
-    // Add touch support for theme toggle button
-    const themeButton = document.querySelector('.theme-toggle-button');
-    if (themeButton) {
-      const handleTouchStart = (e: Event) => {
-        e.preventDefault();
-      };
-      themeButton.addEventListener('touchstart', handleTouchStart, { passive: false });
-      return () => themeButton.removeEventListener('touchstart', handleTouchStart);
-    }
   }, []);
 
   const toggleSubMenu = (key: string) => {
@@ -68,13 +58,15 @@ const Menu: React.FC = () => {
   };
 
   const toggleTheme = () => {
-    const newDarkMode = !isDarkMode;
-    setIsDarkMode(newDarkMode);
-    applyTheme(newDarkMode);
+    setIsDarkMode((prev) => {
+      const next = !prev;
+      applyTheme(next);
+      return next;
+    });
   };
 
   return (
-    <IonMenu side="start" contentId="main-content">
+    <IonMenu side="start" contentId="main-content" className="app-menu">
       <IonHeader>
         <IonToolbar>
           <div slot="start" className="menu-header">
@@ -90,12 +82,12 @@ const Menu: React.FC = () => {
         <IonItemGroup>
           <IonItemDivider onClick={() => toggleSubMenu('objects')}>
             <IonLabel>Объекты строительства</IonLabel>
-            <IonIcon slot="end" color="medium" ios={chevronDownOutline} md={chevronDownSharp} />
+            <IonIcon className="menu-item-icon" slot="end" ios={chevronDownOutline} md={chevronDownSharp} />
           </IonItemDivider>
           <IonMenuToggle hidden={subMenu.objects} autoHide={false}>
             <IonRouterLink href="/projects">
               <IonItem lines="full" detail>
-                <IonIcon slot="start" ios={homeOutline} md={homeOutline} />
+                <IonIcon className="menu-item-icon" slot="start" ios={homeOutline} md={homeOutline} />
                 <IonLabel>Объекты</IonLabel>
               </IonItem>
             </IonRouterLink>
@@ -105,12 +97,12 @@ const Menu: React.FC = () => {
         <IonItemGroup>
           <IonItemDivider onClick={() => toggleSubMenu('docs')}>
             <IonLabel>Документооборот</IonLabel>
-            <IonIcon slot="end" color="medium" ios={chevronDownOutline} md={chevronDownSharp} />
+            <IonIcon className="menu-item-icon" slot="end" ios={chevronDownOutline} md={chevronDownSharp} />
           </IonItemDivider>
           <IonMenuToggle hidden={subMenu.docs} autoHide={false}>
             <IonRouterLink href="/documents">
               <IonItem lines="full" detail>
-                <IonIcon slot="start" ios={documentTextOutline} md={documentTextSharp} />
+                <IonIcon className="menu-item-icon" slot="start" ios={documentTextOutline} md={documentTextSharp} />
                 <IonLabel>Документы</IonLabel>
               </IonItem>
             </IonRouterLink>
@@ -122,12 +114,12 @@ const Menu: React.FC = () => {
           <IonItemGroup>
             <IonItemDivider onClick={() => toggleSubMenu('plan')}>
               <IonLabel>Планирование</IonLabel>
-              <IonIcon slot="end" color="medium" ios={chevronDownOutline} md={chevronDownSharp} />
+              <IonIcon className="menu-item-icon" slot="end" ios={chevronDownOutline} md={chevronDownSharp} />
             </IonItemDivider>
             <IonMenuToggle hidden={subMenu.plan} autoHide={false}>
               <IonRouterLink href="/calendar">
                 <IonItem lines="full" detail>
-                  <IonIcon slot="start" ios={calendarOutline} md={calendarOutline} />
+                  <IonIcon className="menu-item-icon" slot="start" ios={calendarOutline} md={calendarOutline} />
                   <IonLabel>Календарь</IonLabel>
                 </IonItem>
               </IonRouterLink>
@@ -135,7 +127,7 @@ const Menu: React.FC = () => {
             <IonMenuToggle hidden={subMenu.plan} autoHide={false}>
               <IonRouterLink href="/reports">
                 <IonItem lines="full" detail>
-                  <IonIcon slot="start" ios={barChartOutline} md={barChartOutline} />
+                  <IonIcon className="menu-item-icon" slot="start" ios={barChartOutline} md={barChartOutline} />
                   <IonLabel>Отчёты</IonLabel>
                 </IonItem>
               </IonRouterLink>
@@ -147,12 +139,12 @@ const Menu: React.FC = () => {
           <IonItemGroup>
             <IonItemDivider onClick={() => toggleSubMenu('users')}>
               <IonLabel>Управление</IonLabel>
-              <IonIcon slot="end" color="medium" ios={chevronDownOutline} md={chevronDownSharp} />
+              <IonIcon className="menu-item-icon" slot="end" ios={chevronDownOutline} md={chevronDownSharp} />
             </IonItemDivider>
             <IonMenuToggle hidden={subMenu.users} autoHide={false}>
               <IonRouterLink href="/users">
                 <IonItem lines="full" detail disabled={!loading && !canSeeUsers(role)}>
-                  <IonIcon slot="start" ios={peopleCircleOutline} md={peopleCircleOutline} />
+                  <IonIcon className="menu-item-icon" slot="start" ios={peopleCircleOutline} md={peopleCircleOutline} />
                   <IonLabel>
                     Пользователи{!loading && !canSeeUsers(role) ? ' (нет доступа)' : ''}
                   </IonLabel>

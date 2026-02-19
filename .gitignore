@@ -2,6 +2,10 @@
 
 # dependencies
 /node_modules
+/server/node_modules
+/server/uploads
+/server/.env
+/.npm-cache
 /.pnp
 .pnp.js
 

@@ -1,15 +1,16 @@
-import React, { createContext, useContext, useEffect, useState } from 'react';
-import type { User as FirebaseUser } from 'firebase/auth';
-import { auth, firestoreBase } from '../firebase/Firebase';
-import { addDoc, collection, getDocs, query, where } from 'firebase/firestore';
+import React, { createContext, useContext, useEffect, useMemo, useState } from 'react';
 import type { UserRole } from '../models/Roles';
-import { DEFAULT_ROLE } from '../models/Roles';
+import { authApi } from '../api/services';
+import type { AppUser } from '../api/types';
+import { getToken, setToken, USER_KEY } from '../api/http';
 
 interface AuthContextValue {
-  user: FirebaseUser | null;
+  user: AppUser | null;
   role: UserRole | null;
   loading: boolean;
   firestoreUserId: string | null;
+  login: (email: string, password: string) => Promise<void>;
+  logout: () => void;
 }
 
 const AuthContext = createContext<AuthContextValue>({
@@ -17,61 +18,80 @@ const AuthContext = createContext<AuthContextValue>({
   role: null,
   loading: true,
   firestoreUserId: null,
+  login: async () => undefined,
+  logout: () => undefined,
 });
 
+function persistUser(user: AppUser | null): void {
+  if (user) {
+    localStorage.setItem(USER_KEY, JSON.stringify(user));
+  } else {
+    localStorage.removeItem(USER_KEY);
+  }
+}
+
+function readStoredUser(): AppUser | null {
+  const raw = localStorage.getItem(USER_KEY);
+  if (!raw) return null;
+  try {
+    return JSON.parse(raw) as AppUser;
+  } catch {
+    return null;
+  }
+}
+
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [user, setUser] = useState<FirebaseUser | null>(null);
-  const [role, setRole] = useState<UserRole | null>(null);
+  const [user, setUser] = useState<AppUser | null>(null);
   const [loading, setLoading] = useState(true);
-  const [firestoreUserId, setFirestoreUserId] = useState<string | null>(null);
 
   useEffect(() => {
-    const unsub = auth.onAuthStateChanged(async (u) => {
-      setUser(u);
-      if (!u) {
-        setRole(null);
-        setFirestoreUserId(null);
+    const bootstrap = async () => {
+      const token = getToken();
+      if (!token) {
         setLoading(false);
         return;
       }
 
+      const cachedUser = readStoredUser();
+      if (cachedUser) {
+        setUser(cachedUser);
+      }
+
       try {
-        const usersColl = collection(firestoreBase, 'users');
-        const q = query(usersColl, where('email', '==', u.email || ''));
-        const snap = await getDocs(q);
-        if (!snap.empty) {
-          const docId = snap.docs[0].id;
-          const data = snap.docs[0].data() as { role?: UserRole };
-          setRole(data.role ?? DEFAULT_ROLE);
-          setFirestoreUserId(docId);
-        } else {
-          // Bootstrap: если это известный админ, создаём запись и даём роль admin
-          if ((u.email || '').toLowerCase() === 'admin@admin.ru') {
-            const docRef = await addDoc(usersColl, {
-              email: u.email,
-              fio: 'Администратор',
-              role: 'admin' as UserRole,
-              uid: u.uid,
-            });
-            setRole('admin');
-            setFirestoreUserId(docRef.id);
-          } else {
-            setRole(DEFAULT_ROLE);
-            setFirestoreUserId(null);
-          }
-        }
+        const me = await authApi.me();
+        setUser(me.user);
+        persistUser(me.user);
       } catch {
-        setRole(DEFAULT_ROLE);
-        setFirestoreUserId(null);
+        setToken(null);
+        persistUser(null);
+        setUser(null);
       } finally {
         setLoading(false);
       }
-    });
-    return () => unsub();
+    };
+
+    bootstrap().catch(() => setLoading(false));
   }, []);
 
-  return <AuthContext.Provider value={{ user, role, loading, firestoreUserId }}>{children}</AuthContext.Provider>;
+  const value = useMemo<AuthContextValue>(() => ({
+    user,
+    role: user?.role || null,
+    loading,
+    firestoreUserId: user?.id || null,
+    login: async (email: string, password: string) => {
+      const result = await authApi.login(email, password);
+      setToken(result.token);
+      persistUser(result.user);
+      setUser(result.user);
+    },
+    logout: () => {
+      setToken(null);
+      persistUser(null);
+      setUser(null);
+    },
+  }), [user, loading]);
+
+  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 };
 
 export const useAuth = () => useContext(AuthContext);
-

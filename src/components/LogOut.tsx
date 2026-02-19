@@ -1,50 +1,26 @@
-import {IonButton, IonButtons, IonIcon} from "@ionic/react";
-import {logOutOutline} from "ionicons/icons";
-import React, {useEffect, useState} from "react";
-import {onAuthStateChanged, signOut} from "firebase/auth";
-import { auth } from '../firebase/Firebase';
+import { IonButton, IonButtons, IonIcon } from '@ionic/react';
+import { logOutOutline } from 'ionicons/icons';
+import React from 'react';
 import { useHistory } from 'react-router';
-import type { User } from 'firebase/auth';
+import { useAuth } from '../context/AuthContext';
 
 const LogOut: React.FC = () => {
-    const [authUser, setAuthUser] = useState<User | null>(null);
+  const history = useHistory();
+  const { logout } = useAuth();
 
-    const history = useHistory();
+  const userSignOut = () => {
+    logout();
+    history.replace('/login');
+  };
 
-    useEffect(() => {
-        const listen = onAuthStateChanged(auth, (user) => {
-            if (user) {
-                setAuthUser(user);
-            } else {
-                setAuthUser(null);
-                history.push("/login");
-                location.reload();
-            }
-        });
-
-        return () => {
-            listen();
-        };
-    }, []);
-
-    const userSignOut = () => {
-        signOut(auth)
-            .then(() => {
-                console.log("sign out successful");
-                history.push("/login");
-                location.reload();
-            })
-            .catch((error) => console.log(error));
-    };
-
-    return (
-        <IonButtons className="logout-buttons ion-margin-end" slot="end">
-            <IonButton color="danger" fill="solid" onClick={userSignOut} className="logout-button">
-                <span>Выход</span>
-                <IonIcon slot="end" icon={logOutOutline}></IonIcon>
-            </IonButton>
-        </IonButtons>
-    );
+  return (
+    <IonButtons className="logout-buttons ion-margin-end" slot="end">
+      <IonButton fill="solid" onClick={userSignOut} className="logout-button">
+        <span>Выход</span>
+        <IonIcon slot="end" icon={logOutOutline} />
+      </IonButton>
+    </IonButtons>
+  );
 };
 
 export default LogOut;

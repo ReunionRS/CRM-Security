@@ -1,7 +1,4 @@
 import React, { useEffect, useState } from 'react';
-import { addDoc, collection, getDocs, query, where } from 'firebase/firestore';
-import { firestoreBase } from './Firebase';
-import { Project, CONSTRUCTION_STAGES, ProjectStage } from '../models/Project';
 import {
   IonButton,
   IonInput,
@@ -12,13 +9,14 @@ import {
   useIonToast,
   IonLabel,
 } from '@ionic/react';
-import type { UserRole } from '../models/Roles';
-import { ROLE_LABELS } from '../models/Roles';
+import { Project, CONSTRUCTION_STAGES, ProjectStage } from '../models/Project';
+import { projectsApi, usersApi } from '../api/services';
 
 const ProjectCreate: React.FC = () => {
   const [present] = useIonToast();
   const [clientFio, setClientFio] = useState('');
-  const [clientContacts, setClientContacts] = useState('');
+  const [clientPhone, setClientPhone] = useState('');
+  const [clientEmail, setClientEmail] = useState('');
   const [constructionAddress, setConstructionAddress] = useState('');
   const [projectType, setProjectType] = useState<'typical' | 'individual'>('typical');
   const [areaSqm, setAreaSqm] = useState<number>(0);
@@ -28,8 +26,6 @@ const ProjectCreate: React.FC = () => {
   const [cameraUrl, setCameraUrl] = useState('');
   const [clientUserId, setClientUserId] = useState<string | undefined>(undefined);
   const [clients, setClients] = useState<Array<{ id: string; fio: string; email?: string }>>([]);
-
-  const coll = collection(firestoreBase, 'projects');
 
   const toast = (text: string, color: 'success' | 'danger') => {
     present({ message: text, duration: 2000, position: 'bottom', color });
@@ -45,17 +41,14 @@ const ProjectCreate: React.FC = () => {
 
   useEffect(() => {
     const loadClients = async () => {
-      const usersColl = collection(firestoreBase, 'users');
-      const q = query(usersColl, where('role', '==', 'client' as UserRole));
-      const snap = await getDocs(q);
-      const list = snap.docs.map((d) => {
-        const data = d.data() as { fio?: string; email?: string };
-        return {
-          id: d.id,
-          fio: data.fio || data.email || 'Клиент',
-          email: data.email,
-        };
-      });
+      const users = await usersApi.list();
+      const list = users
+        .filter((u) => u.role === 'client')
+        .map((u) => ({
+          id: u.id,
+          fio: u.fio || u.email || 'Клиент',
+          email: u.email,
+        }));
       setClients(list);
     };
     loadClients().catch(() => {});
@@ -66,30 +59,29 @@ const ProjectCreate: React.FC = () => {
     try {
       let finalClientUserId = clientUserId;
       let finalClientFio = clientFio;
-      let finalClientContacts = clientContacts;
+      let finalClientPhone = clientPhone;
+      let finalClientEmail = clientEmail;
 
-      // Если выбран клиент из списка, берём его данные
       if (clientUserId) {
         const selectedClient = clients.find((c) => c.id === clientUserId);
         if (selectedClient) {
           finalClientFio = selectedClient.fio;
-          finalClientContacts = selectedClient.email || clientContacts;
+          finalClientEmail = selectedClient.email || clientEmail;
         }
       } else if (clientFio) {
-        // Автомотчинг: если вбили ФИО существующего клиента, но не выбрали из списка
-        const matchedClient = clients.find(
-          (c) => c.fio.toLowerCase() === clientFio.toLowerCase()
-        );
+        const matchedClient = clients.find((c) => c.fio.toLowerCase() === clientFio.toLowerCase());
         if (matchedClient) {
           finalClientUserId = matchedClient.id;
-          finalClientContacts = matchedClient.email || clientContacts;
+          finalClientEmail = matchedClient.email || clientEmail;
         }
       }
 
-      await addDoc(coll, {
+      const payload: Project = {
         clientFio: finalClientFio,
-        clientContacts: finalClientContacts,
-        clientUserId: finalClientUserId || null,
+        clientContacts: finalClientPhone,
+        clientPhone: finalClientPhone,
+        clientEmail: finalClientEmail,
+        clientUserId: finalClientUserId || undefined,
         constructionAddress,
         projectType,
         areaSqm: Number(areaSqm),
@@ -101,10 +93,13 @@ const ProjectCreate: React.FC = () => {
         stages: defaultStages,
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
-      });
+      };
+
+      await projectsApi.create(payload);
       toast('Объект создан', 'success');
       setClientFio('');
-      setClientContacts('');
+      setClientPhone('');
+      setClientEmail('');
       setConstructionAddress('');
       setAreaSqm(0);
       setEstimatedCost(0);
@@ -113,7 +108,7 @@ const ProjectCreate: React.FC = () => {
       setCameraUrl('');
       setClientUserId(undefined);
       window.location.href = '/projects';
-    } catch (err) {
+    } catch {
       toast('Ошибка создания', 'danger');
     }
   };
@@ -132,11 +127,21 @@ const ProjectCreate: React.FC = () => {
         </IonItem>
         <IonItem>
           <IonInput
-            label="Контактные данные"
+            label="Телефон"
             labelPlacement="floating"
-            placeholder="Телефон, email"
-            value={clientContacts}
-            onIonInput={(e) => setClientContacts(String(e.detail.value ?? ''))}
+            placeholder="+7..."
+            value={clientPhone}
+            onIonInput={(e) => setClientPhone(String(e.detail.value ?? ''))}
+          />
+        </IonItem>
+        <IonItem>
+          <IonInput
+            label="Email клиента"
+            labelPlacement="floating"
+            type="email"
+            placeholder="name@example.com"
+            value={clientEmail}
+            onIonInput={(e) => setClientEmail(String(e.detail.value ?? ''))}
           />
         </IonItem>
         <IonItem>
@@ -163,11 +168,7 @@ const ProjectCreate: React.FC = () => {
           </IonSelect>
         </IonItem>
         <IonItem>
-          <IonSelect
-            label="Тип проекта"
-            value={projectType}
-            onIonChange={(e) => setProjectType(e.detail.value)}
-          >
+          <IonSelect label="Тип проекта" value={projectType} onIonChange={(e) => setProjectType(e.detail.value)}>
             <IonSelectOption value="typical">Типовой</IonSelectOption>
             <IonSelectOption value="individual">Индивидуальный</IonSelectOption>
           </IonSelect>

@@ -38,6 +38,7 @@ export interface Project {
   id?: string;
   clientFio: string;
   clientContacts: string;
+  clientPhone?: string;
   clientEmail?: string;
   clientUserId?: string; // uid пользователя-клиента
   constructionAddress: string;

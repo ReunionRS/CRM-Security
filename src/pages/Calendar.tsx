@@ -20,35 +20,31 @@ import { calendarOutline } from 'ionicons/icons';
 import { IonIcon } from '@ionic/react';
 import '../styles/styles.css';
 import LogOut from '../components/LogOut';
-import { collection, getDocs } from 'firebase/firestore';
-import { firestoreBase } from '../firebase/Firebase';
-import { CONSTRUCTION_STAGES, type Project } from '../models/Project';
+import { type Project } from '../models/Project';
 import { useAuth } from '../context/AuthContext';
+import { projectsApi } from '../api/services';
 
 interface CalendarEvent {
   projectId: string;
   projectAddress: string;
   stageName: string;
-  date: string; // YYYY-MM-DD
+  date: string;
   type: 'start' | 'end';
 }
 
 const Calendar: React.FC = () => {
   const [events, setEvents] = useState<CalendarEvent[]>([]);
   const [loading, setLoading] = useState(true);
-  const { user, role } = useAuth();
+  const { role, firestoreUserId } = useAuth();
 
   useEffect(() => {
     const load = async () => {
       setLoading(true);
-      const coll = collection(firestoreBase, 'projects');
-      const snap = await getDocs(coll);
-      const list: Project[] = snap.docs.map((d) => ({ ...(d.data() as Project), id: d.id })) as any;
-
+      const list = await projectsApi.list();
       const evs: CalendarEvent[] = [];
-      list.forEach((p) => {
-        // Клиент видит только свои объекты
-        if (role === 'client' && user && p.clientUserId !== user.uid) {
+
+      list.forEach((p: Project) => {
+        if (role === 'client' && firestoreUserId && p.clientUserId !== firestoreUserId) {
           return;
         }
         (p.stages || []).forEach((s) => {
@@ -73,13 +69,12 @@ const Calendar: React.FC = () => {
         });
       });
 
-      setEvents(
-        evs.sort((a, b) => (a.date === b.date ? a.stageName.localeCompare(b.stageName) : a.date.localeCompare(b.date)))
-      );
+      setEvents(evs.sort((a, b) => (a.date === b.date ? a.stageName.localeCompare(b.stageName) : a.date.localeCompare(b.date))));
       setLoading(false);
     };
-    load();
-  }, []);
+
+    load().catch(() => setLoading(false));
+  }, [role, firestoreUserId]);
 
   const grouped = useMemo(() => {
     const map = new Map<string, CalendarEvent[]>();

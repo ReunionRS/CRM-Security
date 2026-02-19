@@ -1,11 +1,9 @@
 import React, { useEffect, useState } from 'react';
-import { firestoreBase } from './Firebase';
-import { collection, deleteDoc, doc, getDocs } from 'firebase/firestore';
-import { IonButton, IonIcon, IonChip } from '@ionic/react';
-import { trash } from 'ionicons/icons';
+import { IonButton, IonChip, useIonToast } from '@ionic/react';
 import type { UserRole } from '../models/Roles';
 import { ROLE_LABELS } from '../models/Roles';
 import { useAuth } from '../context/AuthContext';
+import { usersApi } from '../api/services';
 
 interface UserRecord {
   uid: string;
@@ -16,18 +14,24 @@ interface UserRecord {
 
 const UserList: React.FC = () => {
   const [users, setUsers] = useState<UserRecord[]>([]);
-  const value = collection(firestoreBase, 'users');
+  const [present] = useIonToast();
   const { role } = useAuth();
-
   const canManageUsers = role === 'admin' || role === 'director';
 
   const getUsers = async () => {
-    const snap = await getDocs(value);
-    setUsers(snap.docs.map((d) => ({ ...d.data(), uid: d.id } as UserRecord)));
+    const list = await usersApi.list();
+    setUsers(list);
   };
 
   useEffect(() => {
-    getUsers();
+    getUsers().catch((error) => {
+      present({
+        message: error instanceof Error ? error.message : 'Ошибка загрузки пользователей',
+        duration: 2200,
+        color: 'danger',
+        position: 'bottom',
+      });
+    });
   }, []);
 
   if (users.length === 0) {
@@ -58,13 +62,21 @@ const UserList: React.FC = () => {
                 color="danger"
                 fill="outline"
                 onClick={async () => {
-                  if (!window.confirm(`Удалить пользователя ${user.email || user.fio || ''}?`))
-                    return;
-                  await deleteDoc(doc(firestoreBase, 'users', user.uid));
-                  getUsers();
+                  if (!window.confirm(`Удалить пользователя ${user.email || user.fio || ''}?`)) return;
+                  try {
+                    await usersApi.remove(user.uid);
+                    getUsers();
+                  } catch (error) {
+                    present({
+                      message: error instanceof Error ? error.message : 'Ошибка удаления',
+                      duration: 2200,
+                      color: 'danger',
+                      position: 'bottom',
+                    });
+                  }
                 }}
               >
-                <IonIcon slot="icon-only" icon={trash} />
+                Удалить
               </IonButton>
             </div>
           )}

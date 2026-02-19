@@ -1,67 +1,50 @@
-import React, {useState} from 'react';
-import {createUserWithEmailAndPassword} from "firebase/auth";
-import 'firebase/firestore';
-import {auth} from "../firebase/Firebase"
-import 'firebase/compat/auth';
-import 'firebase/compat/firestore';
+import React, { useState } from 'react';
+import { IonButton, IonInput, IonItem, IonLabel, useIonToast } from '@ionic/react';
+import { usersApi } from '../api/services';
 
-import {IonButton, IonInput, IonItem, IonLabel} from '@ionic/react';
+const SignUp: React.FC = () => {
+  const [present] = useIonToast();
+  const [fio, setFio] = useState('');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
 
-
-const SignUp = () => {
-    const [email, setEmail] = useState('');
-    const [password, setPassword] = useState('');
-    const SignUp = (e: { preventDefault: () => void; }) => {
-        e.preventDefault();
-        createUserWithEmailAndPassword(auth, email, password)
-            .then((userCredential) => {
-                console.log('User created');
-                location.reload();
-            })
-            .catch((error) => {
-                console.log("Couldn't create User");
-            });
-    };
-
-    const setInputPassword = (ev: Event) => {
-        const value = (ev.target as HTMLInputElement).value;
-        setPassword(value);
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      await usersApi.create({ fio, email, password, role: 'client' });
+      present({ message: 'Пользователь создан', duration: 1800, color: 'success', position: 'bottom' });
+      setFio('');
+      setEmail('');
+      setPassword('');
+    } catch (error) {
+      present({
+        message: error instanceof Error ? error.message : 'Не удалось создать пользователя',
+        duration: 2200,
+        color: 'danger',
+        position: 'bottom',
+      });
     }
-    const setInputEmail = (ev: Event) => {
-        const value = (ev.target as HTMLInputElement).value;
-        setEmail(value);
-    };
-    return (
-        <form onSubmit={SignUp}>
-            <IonItem>
-                <IonLabel position="floating">Email</IonLabel>
-                <IonInput
-                    type="email"
-                    value={email}
-                    onIonInput={(event) => setInputEmail(event)}>
-                    required
-                </IonInput>
-            </IonItem>
-            <IonItem>
-                <IonLabel position="floating">Email</IonLabel>
-                <IonInput
-                    type="email"
-                    value={email}
-                    onIonInput={(event) => setInputEmail(event)}></IonInput>
-                required
-            </IonItem>
-            <IonItem>
-                <IonLabel position="floating">Пароль</IonLabel>
-                <IonInput
-                    type="password"
-                    value={password}
-                    onIonInput={(event) => setInputPassword(event)}>
-                    required
-                </IonInput>
-            </IonItem>
-            <IonButton expand="block" type="submit" className="ion-no-margin">Create account</IonButton>
-        </form>
-    );
-}
+  };
+
+  return (
+    <form onSubmit={submit}>
+      <IonItem>
+        <IonLabel position="floating">ФИО</IonLabel>
+        <IonInput value={fio} onIonInput={(event) => setFio(String(event.detail.value ?? ''))} required />
+      </IonItem>
+      <IonItem>
+        <IonLabel position="floating">Email</IonLabel>
+        <IonInput type="email" value={email} onIonInput={(event) => setEmail(String(event.detail.value ?? ''))} required />
+      </IonItem>
+      <IonItem>
+        <IonLabel position="floating">Пароль</IonLabel>
+        <IonInput type="password" value={password} onIonInput={(event) => setPassword(String(event.detail.value ?? ''))} required />
+      </IonItem>
+      <IonButton expand="block" type="submit" className="ion-no-margin">
+        Create account
+      </IonButton>
+    </form>
+  );
+};
 
 export default SignUp;

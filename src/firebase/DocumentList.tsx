@@ -1,84 +1,51 @@
 import React, { useEffect, useState } from 'react';
-import {
-  collection,
-  getDocs,
-  addDoc,
-  deleteDoc,
-  doc,
-  query,
-  where,
-  orderBy,
-} from 'firebase/firestore';
-import { ref, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
-import { firestoreBase, storage, auth } from './Firebase';
-import { IonGrid, IonRow, IonCol, IonLabel, IonButton, IonSpinner, IonChip } from '@ionic/react';
+import { IonGrid, IonRow, IonCol, IonLabel, IonButton, IonSpinner, IonChip, IonIcon, useIonToast } from '@ionic/react';
 import { documentTextOutline, downloadOutline, trashOutline } from 'ionicons/icons';
-import { IonIcon } from '@ionic/react';
-
-export interface DocumentRecord {
-  id: string;
-  projectId: string;
-  projectAddress?: string;
-  name: string;
-  type: string;
-  storagePath: string;
-  uploadedAt: string;
-  uploadedBy?: string;
-}
+import { documentsApi } from '../api/services';
+import type { DocumentRecord } from '../api/types';
 
 interface DocumentListProps {
   projectId: string | null;
-  projectAddress?: string;
 }
 
-const DocumentList: React.FC<DocumentListProps> = ({ projectId, projectAddress }) => {
+const DocumentList: React.FC<DocumentListProps> = ({ projectId }) => {
   const [docs, setDocs] = useState<DocumentRecord[]>([]);
   const [loading, setLoading] = useState(true);
+  const [present] = useIonToast();
 
   const load = async () => {
     setLoading(true);
-    const coll = collection(firestoreBase, 'documents');
-    const q = projectId
-      ? query(coll, where('projectId', '==', projectId), orderBy('uploadedAt', 'desc'))
-      : query(coll, orderBy('uploadedAt', 'desc'));
-    const snap = await getDocs(q);
-    const list = snap.docs.map((d) => ({
-      id: d.id,
-      ...d.data(),
-      projectAddress: d.data().projectAddress || '',
-    })) as DocumentRecord[];
+    const list = await documentsApi.list({ projectId: projectId || undefined });
     setDocs(list);
     setLoading(false);
   };
 
   useEffect(() => {
-    load();
+    load().catch(() => setLoading(false));
   }, [projectId]);
 
   const handleDelete = async (rec: DocumentRecord) => {
     if (!window.confirm(`Удалить «${rec.name}»?`)) return;
     try {
-      const storageRef = ref(storage, rec.storagePath);
-      await deleteObject(storageRef);
-    } catch (_) {}
-    await deleteDoc(doc(firestoreBase, 'documents', rec.id));
-    load();
+      await documentsApi.remove(rec.id);
+      load();
+    } catch (error) {
+      present({
+        message: error instanceof Error ? error.message : 'Ошибка удаления',
+        duration: 2200,
+        color: 'danger',
+        position: 'bottom',
+      });
+    }
   };
 
   const handleDownload = async (rec: DocumentRecord) => {
-    try {
-      const storageRef = ref(storage, rec.storagePath);
-      const url = await getDownloadURL(storageRef);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = rec.name;
-      a.target = '_blank';
-      a.rel = 'noopener';
-      a.click();
-    } catch (e) {
-      console.error(e);
-      alert('Не удалось скачать файл');
-    }
+    const a = document.createElement('a');
+    a.href = documentsApi.download(rec.id);
+    a.download = rec.name;
+    a.target = '_blank';
+    a.rel = 'noopener';
+    a.click();
   };
 
   if (loading) {

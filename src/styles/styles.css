@@ -51,6 +51,11 @@ ion-card:hover {
 }
 
 /* Menu Header Styles */
+.app-menu {
+    --width: 320px;
+    --max-width: 88vw;
+}
+
 .menu-header {
     display: flex;
     flex-direction: row;
@@ -64,13 +69,13 @@ ion-card:hover {
     width: 48px;
     height: 48px;
     border-radius: 8px;
-    background: rgba(0, 0, 0, 0.08);
-    padding: 4px;
+    background: transparent;
+    padding: 0;
     flex-shrink: 0;
 }
 
 html.ion-palette-dark .menu-logo {
-    background: rgba(255, 255, 255, 0.1);
+    background: transparent;
 }
 
 .menu-title {
@@ -92,14 +97,17 @@ html.ion-palette-dark .menu-logo {
     opacity: 0.7;
 }
 
+.menu-item-icon {
+    color: #e0b300;
+}
+
 .menu-footer {
-    position: absolute;
+    position: sticky;
     bottom: 0;
-    left: 0;
-    right: 0;
     padding: 12px;
     background: rgba(0, 0, 0, 0.08);
     border-top: 1px solid rgba(0, 0, 0, 0.1);
+    z-index: 2;
 }
 
 html.ion-palette-dark .menu-footer {
@@ -133,14 +141,6 @@ html.ion-palette-dark .theme-toggle-button {
 
 html:not(.ion-palette-dark) .theme-toggle-button {
     --background: rgba(var(--ion-color-primary-rgb), 0.1);
-}
-
-@media (max-width: 480px) {
-    .theme-toggle-button {
-        --padding-bottom: 12px !important;
-        --padding-top: 12px !important;
-        --min-height: 46px !important;
-    }
 }
 
 /* Строительная CRM: объекты и этапы */
@@ -314,10 +314,32 @@ html.ion-palette-dark .user-card {
     display: flex;
     align-items: center;
     gap: 8px;
+    --background: #e0b300 !important;
+    --background-hover: #d3aa00 !important;
+    --background-focused: #d3aa00 !important;
+    --background-activated: #c49d00 !important;
+    --color: #ffffff !important;
+    --border-radius: 10px;
+    font-weight: 700;
 }
 
 .logout-button span {
     white-space: nowrap;
+}
+
+.logout-button ion-icon {
+    color: #ffffff !important;
+}
+
+.logout-button::part(native) {
+    background: #e0b300 !important;
+    color: #ffffff !important;
+}
+
+.choose-files-button {
+    --border-color: #e0b300 !important;
+    --color: #e0b300 !important;
+    --background: rgba(224, 179, 0, 0.08);
 }
 
 /* Project Edit Modal */
@@ -381,6 +403,65 @@ html.ion-palette-dark .user-card {
     z-index: 10;
 }
 
+.documents-item {
+    --inner-padding-end: 8px;
+}
+
+.documents-item-label {
+    white-space: normal;
+    width: 100%;
+}
+
+.documents-doc-type {
+    display: block;
+    margin-bottom: 4px;
+}
+
+.documents-doc-name {
+    word-break: break-word;
+    line-height: 1.25;
+}
+
+.documents-doc-meta {
+    line-height: 1.25;
+    opacity: 0.8;
+    margin-top: 2px;
+}
+
+.documents-item-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    margin-top: 8px;
+}
+
+.stage-file-input {
+    font-size: 0.9rem !important;
+    color: var(--ion-color-medium-shade);
+}
+
+.stage-file-input::file-selector-button {
+    background: #e0b300;
+    color: #ffffff;
+    border: 1px solid #e0b300;
+    border-radius: 8px;
+    padding: 7px 12px;
+    font-weight: 600;
+    margin-right: 8px;
+    cursor: pointer;
+}
+
+.stage-file-input::-webkit-file-upload-button {
+    background: #e0b300;
+    color: #ffffff;
+    border: 1px solid #e0b300;
+    border-radius: 8px;
+    padding: 7px 12px;
+    font-weight: 600;
+    margin-right: 8px;
+    cursor: pointer;
+}
+
 /* Media Queries for Responsive Design */
 @media (max-width: 768px) {
     .user-cards-grid {
@@ -410,17 +491,8 @@ html.ion-palette-dark .user-card {
         gap: 10px;
     }
 
-    .menu-header {
-        padding: 8px 0;
-    }
-
-    .menu-logo {
-        width: 40px;
-        height: 40px;
-    }
-
-    .menu-title h2 {
-        font-size: 1rem;
+    .documents-item-actions ion-button {
+        margin: 0;
     }
 
     /* Better spacing for touch */
@@ -493,39 +565,6 @@ html.ion-palette-dark .user-card {
         display: none;
     }
 
-    .menu-header {
-        padding: 6px 0;
-    }
-
-    .menu-logo {
-        width: 36px;
-        height: 36px;
-    }
-
-    .menu-title h2 {
-        font-size: 0.9rem;
-    }
-
-    .menu-role {
-        font-size: 0.7rem;
-    }
-
-    .menu-footer {
-        padding: 8px;
-        padding-bottom: 10px;
-    }
-
-    .theme-toggle-button {
-        --padding-bottom: 10px !important;
-        --padding-top: 10px !important;
-        --min-height: 44px !important;
-        font-size: 0.95rem;
-    }
-
-    .theme-toggle-button span {
-        display: inline;
-    }
-
     .edit-form-label {
         font-size: 0.85rem;
     }
@@ -561,6 +600,18 @@ html.ion-palette-dark .user-card {
 
     .stage-item ion-item {
         --inner-padding-end: 8px;
+    }
+
+    .documents-item {
+        align-items: flex-start;
+    }
+
+    .documents-item ion-icon[slot="start"] {
+        margin-top: 10px;
+    }
+
+    .documents-item-actions {
+        gap: 2px;
     }
 
     /* File input better styling */

@@ -1,6 +1,4 @@
 import React, { useEffect, useState } from 'react';
-import { collection, getDocs, doc, deleteDoc, updateDoc } from 'firebase/firestore';
-import { firestoreBase } from './Firebase';
 import { Project, CONSTRUCTION_STAGES } from '../models/Project';
 import {
   IonCard,
@@ -20,10 +18,12 @@ import {
   IonInput,
   IonSelect,
   IonSelectOption,
+  useIonToast,
 } from '@ionic/react';
 import { useHistory } from 'react-router-dom';
-import { locationOutline, personOutline, pencil, trash } from 'ionicons/icons';
+import { locationOutline, personOutline } from 'ionicons/icons';
 import { useAuth } from '../context/AuthContext';
+import { projectsApi, usersApi } from '../api/services';
 
 interface UserRecord {
   uid: string;
@@ -45,49 +45,62 @@ const ProjectList: React.FC = () => {
   const [editingProject, setEditingProject] = useState<Project | null>(null);
   const [editClientId, setEditClientId] = useState<string>('');
   const [editFio, setEditFio] = useState<string>('');
+  const [editPhone, setEditPhone] = useState<string>('');
   const [editEmail, setEditEmail] = useState<string>('');
   const [editAddress, setEditAddress] = useState<string>('');
   const [editStatus, setEditStatus] = useState<string>('');
+  const [present] = useIonToast();
   const history = useHistory();
-  const coll = collection(firestoreBase, 'projects');
-  const usersCollection = collection(firestoreBase, 'users');
-  const { user, role, firestoreUserId } = useAuth();
+  const { role, firestoreUserId } = useAuth();
 
   const getData = async () => {
-    const snap = await getDocs(coll);
+    const list = await projectsApi.list();
     setProjects(
-      snap.docs.map((d) => {
-        const data = d.data();
-        return {
-          ...data,
-          id: d.id,
-          stages: data.stages || CONSTRUCTION_STAGES.map((name, i) => ({
+      list.map((project) => ({
+        ...project,
+        stages:
+          project.stages ||
+          CONSTRUCTION_STAGES.map((name, i) => ({
             id: `stage-${i}`,
             name,
             plannedStart: '',
             plannedEnd: '',
             status: 'not_started' as const,
           })),
-        } as Project;
-      })
+      }))
     );
   };
 
   const getUsers = async () => {
-    const snap = await getDocs(usersCollection);
-    setUsers(snap.docs.map((d) => ({ ...d.data(), uid: d.id } as UserRecord)));
+    const list = await usersApi.list();
+    setUsers(list.map((u) => ({ uid: u.id, fio: u.fio, email: u.email })));
   };
 
   useEffect(() => {
-    getData();
-    getUsers();
+    Promise.all([getData(), getUsers()]).catch((error) => {
+      present({
+        message: error instanceof Error ? error.message : 'Ошибка загрузки',
+        duration: 2200,
+        color: 'danger',
+        position: 'bottom',
+      });
+    });
   }, []);
 
   const handleDelete = async (id: string, e: React.MouseEvent) => {
     e.stopPropagation();
     if (!window.confirm('Удалить объект?')) return;
-    await deleteDoc(doc(firestoreBase, 'projects', id));
-    getData();
+    try {
+      await projectsApi.remove(id);
+      getData();
+    } catch (error) {
+      present({
+        message: error instanceof Error ? error.message : 'Ошибка удаления',
+        duration: 2200,
+        color: 'danger',
+        position: 'bottom',
+      });
+    }
   };
 
   const handleEditClick = (project: Project, e: React.MouseEvent) => {
@@ -95,6 +108,7 @@ const ProjectList: React.FC = () => {
     setEditingProject(project);
     setEditClientId(project.clientUserId || '');
     setEditFio(project.clientFio || '');
+    setEditPhone(project.clientPhone || project.clientContacts || '');
     setEditEmail(project.clientEmail || '');
     setEditAddress(project.constructionAddress || '');
     setEditStatus(project.status || 'draft');
@@ -104,19 +118,14 @@ const ProjectList: React.FC = () => {
     if (!editingProject?.id) return;
 
     let finalClientId = editClientId;
-    
-    // Автомотчинг: если вбили ФИО существующего клиента, но не выбрали из списка
     if (!finalClientId && editFio) {
-      const matchedUser = users.find(
-        (u) => u.fio?.toLowerCase() === editFio.toLowerCase()
-      );
+      const matchedUser = users.find((u) => u.fio?.toLowerCase() === editFio.toLowerCase());
       if (matchedUser) {
         finalClientId = matchedUser.uid;
       }
     }
 
-    // Если выбран клиент из списка, берём его данные
-    if (finalClientId && finalClientId !== editClientId) {
+    if (finalClientId) {
       const selectedUser = users.find((u) => u.uid === finalClientId);
       if (selectedUser) {
         setEditFio(selectedUser.fio || editFio);
@@ -124,26 +133,34 @@ const ProjectList: React.FC = () => {
       }
     }
 
-    await updateDoc(doc(firestoreBase, 'projects', editingProject.id), {
-      clientUserId: finalClientId,
-      clientFio: editFio,
-      clientEmail: editEmail,
-      constructionAddress: editAddress,
-      status: editStatus,
-    });
+    try {
+      await projectsApi.update(editingProject.id, {
+        clientUserId: finalClientId || undefined,
+        clientFio: editFio,
+        clientPhone: editPhone,
+        clientContacts: editPhone,
+        clientEmail: editEmail,
+        constructionAddress: editAddress,
+        status: editStatus as Project['status'],
+      });
 
-    setEditingProject(null);
-    getData();
+      setEditingProject(null);
+      getData();
+    } catch (error) {
+      present({
+        message: error instanceof Error ? error.message : 'Ошибка сохранения',
+        duration: 2200,
+        color: 'danger',
+        position: 'bottom',
+      });
+    }
   };
 
-  const completedCount = (p: Project) =>
-    (p.stages || []).filter((s) => s.status === 'completed').length;
+  const completedCount = (p: Project) => (p.stages || []).filter((s) => s.status === 'completed').length;
   const totalStages = CONSTRUCTION_STAGES.length;
-  const progressPercent = (p: Project) =>
-    totalStages ? Math.round((completedCount(p) / totalStages) * 100) : 0;
+  const progressPercent = (p: Project) => (totalStages ? Math.round((completedCount(p) / totalStages) * 100) : 0);
 
-  const debt = (p: Project) =>
-    Math.max((p.contractAmount ?? 0) - (p.paidAmount ?? 0), 0);
+  const debt = (p: Project) => Math.max((p.contractAmount ?? 0) - (p.paidAmount ?? 0), 0);
 
   const isPaymentOverdue = (p: Project) => {
     if (!debt(p)) return false;
@@ -159,12 +176,7 @@ const ProjectList: React.FC = () => {
   return (
     <div className="project-list">
       {visibleProjects.map((project) => (
-        <IonCard
-          key={project.id}
-          button
-          onClick={() => history.push(`/projects/${project.id}`)}
-          className="project-card"
-        >
+        <IonCard key={project.id} button onClick={() => history.push(`/projects/${project.id}`)} className="project-card">
           <IonCardHeader>
             <IonCardTitle>
               <IonIcon icon={locationOutline} className="card-icon" />
@@ -187,10 +199,7 @@ const ProjectList: React.FC = () => {
             <div className="project-progress">
               <IonLabel>Готовность: {progressPercent(project)}%</IonLabel>
               <div className="progress-bar">
-                <div
-                  className="progress-fill"
-                  style={{ width: `${progressPercent(project)}%` }}
-                />
+                <div className="progress-fill" style={{ width: `${progressPercent(project)}%` }} />
               </div>
             </div>
             <div className="project-dates">
@@ -199,13 +208,8 @@ const ProjectList: React.FC = () => {
             </div>
             <div style={{ display: 'flex', gap: '8px', marginTop: '12px' }}>
               {role !== 'client' && (
-                <IonButton
-                  color="primary"
-                  fill="clear"
-                  size="small"
-                  onClick={(e) => handleEditClick(project, e)}
-                >
-                  <IonIcon slot="icon-only" icon={pencil} />
+                <IonButton color="primary" fill="clear" size="small" onClick={(e) => handleEditClick(project, e)}>
+                  Редактировать
                 </IonButton>
               )}
               {role !== 'client' && (
@@ -215,7 +219,7 @@ const ProjectList: React.FC = () => {
                   size="small"
                   onClick={(e) => project.id && handleDelete(project.id, e)}
                 >
-                  <IonIcon slot="icon-only" icon={trash} />
+                  Удалить
                 </IonButton>
               )}
             </div>
@@ -227,11 +231,7 @@ const ProjectList: React.FC = () => {
         <IonHeader>
           <IonToolbar>
             <IonTitle>Редактировать объект</IonTitle>
-            <IonButton
-              slot="end"
-              fill="clear"
-              onClick={() => setEditingProject(null)}
-            >
+            <IonButton slot="end" fill="clear" onClick={() => setEditingProject(null)}>
               Закрыть
             </IonButton>
           </IonToolbar>
@@ -239,15 +239,18 @@ const ProjectList: React.FC = () => {
         <IonContent className="ion-padding">
           <div className="edit-form-group">
             <label className="edit-form-label">Клиент</label>
-            <IonSelect value={editClientId} onIonChange={(e) => {
-              const selectedId = e.detail.value;
-              setEditClientId(selectedId);
-              const selectedUser = users.find((u) => u.uid === selectedId);
-              if (selectedUser) {
-                setEditFio(selectedUser.fio || '');
-                setEditEmail(selectedUser.email || '');
-              }
-            }}>
+            <IonSelect
+              value={editClientId}
+              onIonChange={(e) => {
+                const selectedId = e.detail.value;
+                setEditClientId(selectedId);
+                const selectedUser = users.find((u) => u.uid === selectedId);
+                if (selectedUser) {
+                  setEditFio(selectedUser.fio || '');
+                  setEditEmail(selectedUser.email || '');
+                }
+              }}
+            >
               <IonSelectOption value="">Нет привязки</IonSelectOption>
               {users.map((u) => (
                 <IonSelectOption key={u.uid} value={u.uid}>
@@ -259,10 +262,15 @@ const ProjectList: React.FC = () => {
 
           <div className="edit-form-group">
             <label className="edit-form-label">ФИО Клиента</label>
+            <IonInput value={editFio} onIonChange={(e) => setEditFio(e.detail.value || '')} placeholder="Введите ФИО" />
+          </div>
+
+          <div className="edit-form-group">
+            <label className="edit-form-label">Телефон</label>
             <IonInput
-              value={editFio}
-              onIonChange={(e) => setEditFio(e.detail.value || '')}
-              placeholder="Введите ФИО"
+              value={editPhone}
+              onIonChange={(e) => setEditPhone(e.detail.value || '')}
+              placeholder="+7..."
             />
           </div>
 

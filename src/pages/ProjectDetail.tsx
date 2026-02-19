@@ -1,9 +1,5 @@
 import React, { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
-import { doc, getDoc, updateDoc, collection, getDocs } from 'firebase/firestore';
-import { firestoreBase } from '../firebase/Firebase';
-import { ref, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
-import { storage } from '../firebase/Firebase';
 import { Project, ProjectStage, CONSTRUCTION_STAGES, StageStatus } from '../models/Project';
 import {
   IonBackButton,
@@ -29,9 +25,11 @@ import {
   IonModal,
   IonIcon,
 } from '@ionic/react';
-import { close } from 'ionicons/icons';
+import { chevronBackOutline, chevronForwardOutline, close } from 'ionicons/icons';
 import '../styles/styles.css';
 import { useAuth } from '../context/AuthContext';
+import { projectsApi, usersApi } from '../api/services';
+import { backendAssetUrl } from '../api/http';
 
 const STAGE_STATUS_LABELS: Record<StageStatus, string> = {
   not_started: 'Не начат',
@@ -76,11 +74,12 @@ const ProjectDetail: React.FC = () => {
   const [stages, setStages] = useState<ProjectStage[]>([]);
   const [present] = useIonToast();
   const { role } = useAuth();
-  
+
   const [editModalOpen, setEditModalOpen] = useState(false);
   const [editAddress, setEditAddress] = useState('');
   const [editClientFio, setEditClientFio] = useState('');
-  const [editClientContacts, setEditClientContacts] = useState('');
+  const [editClientPhone, setEditClientPhone] = useState('');
+  const [editClientEmail, setEditClientEmail] = useState('');
   const [editStatus, setEditStatus] = useState<string>('draft');
   const [editClientUserId, setEditClientUserId] = useState('');
   const [uploadingStageIndex, setUploadingStageIndex] = useState<number | null>(null);
@@ -93,69 +92,84 @@ const ProjectDetail: React.FC = () => {
 
   const [contractAmount, setContractAmount] = useState<number>(0);
   const [paidAmount, setPaidAmount] = useState<number>(0);
-  const [nextPaymentDate, setNextPaymentDate] = useState<string>('');
-  const [lastPaymentDate, setLastPaymentDate] = useState<string>('');
+  const [nextPaymentDate, setNextPaymentDate] = useState('');
+  const [lastPaymentDate, setLastPaymentDate] = useState('');
+  const [galleryOpen, setGalleryOpen] = useState(false);
+  const [galleryImages, setGalleryImages] = useState<string[]>([]);
+  const [galleryIndex, setGalleryIndex] = useState(0);
+  const [galleryZoom, setGalleryZoom] = useState(1);
+  const [galleryPanX, setGalleryPanX] = useState(0);
+  const [galleryPanY, setGalleryPanY] = useState(0);
+  const [galleryDragging, setGalleryDragging] = useState(false);
+  const [galleryMoved, setGalleryMoved] = useState(false);
 
   useEffect(() => {
     if (!id) return;
     const load = async () => {
-      const ref = doc(firestoreBase, 'projects', id);
-      const snap = await getDoc(ref);
-      if (snap.exists()) {
-        const data = { ...snap.data(), id: snap.id } as Project;
-        setProject(data);
-        setStages(ensureStages(data));
-        setContractAmount(data.contractAmount ?? 0);
-        setPaidAmount(data.paidAmount ?? 0);
-        setNextPaymentDate(data.nextPaymentDate ?? '');
-        setLastPaymentDate(data.lastPaymentDate ?? '');
-        setEditAddress(data.constructionAddress);
-        setEditClientFio(data.clientFio);
-        setEditClientContacts(data.clientContacts);
-        setEditStatus(data.status);
-        setEditClientUserId(data.clientUserId || '');
-      }
+      const data = await projectsApi.get(id);
+      setProject(data);
+      setStages(ensureStages(data));
+      setContractAmount(data.contractAmount ?? 0);
+      setPaidAmount(data.paidAmount ?? 0);
+      setNextPaymentDate(data.nextPaymentDate ?? '');
+      setLastPaymentDate(data.lastPaymentDate ?? '');
+      setEditAddress(data.constructionAddress);
+      setEditClientFio(data.clientFio);
+      setEditClientPhone(data.clientPhone || data.clientContacts || '');
+      setEditClientEmail(data.clientEmail || '');
+      setEditStatus(data.status);
+      setEditClientUserId(data.clientUserId || '');
     };
-    load();
+    load().catch((error) => {
+      present({
+        message: error instanceof Error ? error.message : 'Ошибка загрузки проекта',
+        duration: 2200,
+        position: 'bottom',
+        color: 'danger',
+      });
+    });
   }, [id]);
 
   useEffect(() => {
     const loadClients = async () => {
-      const usersColl = collection(firestoreBase, 'users');
-      const snap = await getDocs(usersColl);
-      const list = snap.docs
-        .map((d) => {
-          const data = d.data() as { fio?: string; email?: string; role?: string };
-          return {
-            id: d.id,
-            fio: data.fio || data.email || 'Клиент',
-            email: data.email,
-          };
-        })
-        .filter((u) => {
-          const docData = snap.docs.find(doc => doc.id === u.id)?.data();
-          return docData?.role === 'client';
-        });
+      const users = await usersApi.list();
+      const list = users
+        .filter((u) => u.role === 'client')
+        .map((u) => ({
+          id: u.id,
+          fio: u.fio || u.email || 'Клиент',
+          email: u.email,
+        }));
       setClients(list);
     };
     loadClients().catch(() => {});
   }, []);
 
+  const persistProjectPatch = async (patch: Partial<Project>) => {
+    if (!id) return;
+    const updated = await projectsApi.update(id, patch);
+    setProject(updated);
+    setStages(ensureStages(updated));
+  };
+
   const updateStage = async (index: number, patch: Partial<ProjectStage>) => {
-    // Prevent clients from updating stage status
     if (role === 'client') {
       present({ message: 'У вас нет прав для изменения статуса этапов', duration: 2000, position: 'bottom', color: 'warning' });
       return;
     }
-    
+
     const next = stages.map((s, i) => (i === index ? { ...s, ...patch } : s));
     setStages(next);
-    if (!id) return;
-    const ref = doc(firestoreBase, 'projects', id);
-    await updateDoc(ref, {
-      stages: next,
-      updatedAt: new Date().toISOString(),
-    });
+    try {
+      await persistProjectPatch({ stages: next, updatedAt: new Date().toISOString() });
+    } catch (error) {
+      present({
+        message: error instanceof Error ? error.message : 'Ошибка обновления этапа',
+        duration: 2200,
+        position: 'bottom',
+        color: 'danger',
+      });
+    }
   };
 
   const markOverdue = (stage: ProjectStage): StageStatus => {
@@ -165,11 +179,8 @@ const ProjectDetail: React.FC = () => {
   };
 
   const completedCount = stages.filter((s) => s.status === 'completed').length;
-  const progressPercent = CONSTRUCTION_STAGES.length
-    ? Math.round((completedCount / CONSTRUCTION_STAGES.length) * 100)
-    : 0;
+  const progressPercent = CONSTRUCTION_STAGES.length ? Math.round((completedCount / CONSTRUCTION_STAGES.length) * 100) : 0;
 
-  // Для Gantt: находим общий диапазон дат по этапам
   const parsedStages = stages
     .map((s) => ({
       ...s,
@@ -183,157 +194,198 @@ const ProjectDetail: React.FC = () => {
     endMs: s.end.getTime(),
   }));
 
-  const minTime =
-    timeRanges.length > 0 ? Math.min(...timeRanges.map((t) => t.startMs)) : null;
-  const maxTime =
-    timeRanges.length > 0 ? Math.max(...timeRanges.map((t) => t.endMs)) : null;
-
-  const totalMs =
-    minTime !== null && maxTime !== null ? maxTime - minTime || 1 : 1;
+  const minTime = timeRanges.length > 0 ? Math.min(...timeRanges.map((t) => t.startMs)) : null;
+  const maxTime = timeRanges.length > 0 ? Math.max(...timeRanges.map((t) => t.endMs)) : null;
+  const totalMs = minTime !== null && maxTime !== null ? maxTime - minTime || 1 : 1;
 
   const debt = Math.max((project?.contractAmount ?? contractAmount) - (project?.paidAmount ?? paidAmount), 0);
   const paidPercent =
     (project?.contractAmount ?? contractAmount) > 0
-      ? Math.round(
-          ((project?.paidAmount ?? paidAmount) / (project?.contractAmount ?? contractAmount)) * 100
-        )
+      ? Math.round(((project?.paidAmount ?? paidAmount) / (project?.contractAmount ?? contractAmount)) * 100)
       : 0;
 
   const isPaymentOverdue =
-    debt > 0 &&
-    (project?.nextPaymentDate ?? nextPaymentDate) &&
-    new Date(project?.nextPaymentDate ?? nextPaymentDate) < new Date();
+    debt > 0 && (project?.nextPaymentDate ?? nextPaymentDate) && new Date(project?.nextPaymentDate ?? nextPaymentDate) < new Date();
 
-  const canEditFinance =
-    role === 'admin' || role === 'director' || role === 'accountant' || role === 'manager';
+  const canEditFinance = role === 'admin' || role === 'director' || role === 'accountant' || role === 'manager';
   const canEditProject = role === 'admin' || role === 'director' || role === 'manager';
 
   const handleSaveEdit = async () => {
     if (!id) return;
-    const ref = doc(firestoreBase, 'projects', id);
-    
+
     let clientFio = editClientFio;
-    let clientContacts = editClientContacts;
+    let clientPhone = editClientPhone;
+    let clientEmail = editClientEmail;
     let finalClientUserId = editClientUserId;
-    
+
     if (editClientUserId) {
       const selectedClient = clients.find((c) => c.id === editClientUserId);
       if (selectedClient) {
         clientFio = selectedClient.fio || editClientFio;
-        clientContacts = selectedClient.email || editClientContacts;
+        clientEmail = selectedClient.email || editClientEmail;
       }
     } else if (editClientFio) {
-      const matchingClient = clients.find((c) => 
-        c.fio.toLowerCase() === editClientFio.toLowerCase()
-      );
+      const matchingClient = clients.find((c) => c.fio.toLowerCase() === editClientFio.toLowerCase());
       if (matchingClient) {
         finalClientUserId = matchingClient.id;
-        clientContacts = matchingClient.email || clientContacts;
+        clientEmail = matchingClient.email || clientEmail;
       }
     }
-    
-    await updateDoc(ref, {
-      constructionAddress: editAddress,
-      clientFio,
-      clientContacts,
-      clientUserId: finalClientUserId || undefined,
-      status: editStatus,
-      updatedAt: new Date().toISOString(),
-    });
-    setProject((prev) =>
-      prev
-        ? {
-            ...prev,
-            constructionAddress: editAddress,
-            clientFio,
-            clientContacts,
-            clientUserId: finalClientUserId || undefined,
-            status: editStatus as any,
-          }
-        : prev
-    );
-    setEditModalOpen(false);
-    present({ message: 'Объект обновлен', duration: 2000, position: 'bottom', color: 'success' });
+
+    try {
+      await persistProjectPatch({
+        constructionAddress: editAddress,
+        clientFio,
+        clientPhone,
+        clientContacts: clientPhone,
+        clientEmail,
+        clientUserId: finalClientUserId || undefined,
+        status: editStatus as Project['status'],
+        updatedAt: new Date().toISOString(),
+      });
+      setEditModalOpen(false);
+      present({ message: 'Объект обновлен', duration: 2000, position: 'bottom', color: 'success' });
+    } catch (error) {
+      present({
+        message: error instanceof Error ? error.message : 'Ошибка обновления объекта',
+        duration: 2200,
+        position: 'bottom',
+        color: 'danger',
+      });
+    }
   };
 
-  const handleStageImageUpload = async (index: number, file: File) => {
+  const handleStageImageUpload = async (index: number, files: File[]) => {
     if (!id) return;
-    
-    // Prevent clients from uploading images
+
     if (role === 'client') {
       present({ message: 'У вас нет прав для загрузки изображений', duration: 2000, position: 'bottom', color: 'warning' });
       return;
     }
-    
+
     setUploadingStageIndex(index);
     try {
-      const timestamp = Date.now();
-      const filename = `${id}_stage_${index}_${timestamp}.jpg`;
-      const storageRef = ref(storage, `projects/${id}/stages/${filename}`);
-      await uploadBytes(storageRef, file);
-      const downloadUrl = await getDownloadURL(storageRef);
-      
-      const photoUrls = stages[index].photoUrls || [];
-      photoUrls.push(downloadUrl);
-      const updatedStages = stages.map((s, i) => (i === index ? { ...s, photoUrls } : s));
-      setStages(updatedStages);
-      
-      const ref_doc = doc(firestoreBase, 'projects', id);
-      await updateDoc(ref_doc, {
-        stages: updatedStages,
-        updatedAt: new Date().toISOString(),
-      });
-      present({ message: 'Изображение загружено', duration: 2000, position: 'bottom', color: 'success' });
+      const updated = await projectsApi.uploadStagePhotos(id, index, files);
+      setProject(updated);
+      setStages(ensureStages(updated));
+      present({ message: 'Изображения загружены', duration: 2000, position: 'bottom', color: 'success' });
     } catch (error) {
-      console.error('Ошибка загрузки:', error);
-      present({ message: 'Ошибка загрузки изображения', duration: 2000, position: 'bottom', color: 'danger' });
+      present({
+        message: error instanceof Error ? error.message : 'Ошибка загрузки изображения',
+        duration: 2200,
+        position: 'bottom',
+        color: 'danger',
+      });
     } finally {
       setUploadingStageIndex(null);
+    }
+  };
+
+  const openGallery = (images: string[], startIndex: number) => {
+    if (!images.length) return;
+    setGalleryImages(images);
+    setGalleryIndex(startIndex);
+    setGalleryZoom(1);
+    setGalleryPanX(0);
+    setGalleryPanY(0);
+    setGalleryOpen(true);
+  };
+
+  const prevGallery = () => {
+    if (!galleryImages.length) return;
+    setGalleryIndex((prev) => (prev - 1 + galleryImages.length) % galleryImages.length);
+    setGalleryPanX(0);
+    setGalleryPanY(0);
+  };
+
+  const nextGallery = () => {
+    if (!galleryImages.length) return;
+    setGalleryIndex((prev) => (prev + 1) % galleryImages.length);
+    setGalleryPanX(0);
+    setGalleryPanY(0);
+  };
+
+  const zoomInGallery = () => setGalleryZoom((prev) => Math.min(prev + 0.25, 3));
+  const zoomOutGallery = () =>
+    setGalleryZoom((prev) => {
+      const next = Math.max(prev - 0.25, 1);
+      if (next === 1) {
+        setGalleryPanX(0);
+        setGalleryPanY(0);
+      }
+      return next;
+    });
+
+  const handleGalleryPointerDown = (e: React.PointerEvent<HTMLImageElement>) => {
+    if (galleryZoom <= 1) return;
+    setGalleryDragging(true);
+    setGalleryMoved(false);
+    (e.currentTarget as HTMLImageElement).setPointerCapture(e.pointerId);
+    (e.currentTarget as any)._dragStart = {
+      x: e.clientX,
+      y: e.clientY,
+      panX: galleryPanX,
+      panY: galleryPanY,
+    };
+  };
+
+  const handleGalleryPointerMove = (e: React.PointerEvent<HTMLImageElement>) => {
+    if (!galleryDragging || galleryZoom <= 1) return;
+    const start = (e.currentTarget as any)._dragStart as { x: number; y: number; panX: number; panY: number } | undefined;
+    if (!start) return;
+    const dx = e.clientX - start.x;
+    const dy = e.clientY - start.y;
+    if (Math.abs(dx) > 3 || Math.abs(dy) > 3) setGalleryMoved(true);
+    setGalleryPanX(start.panX + dx);
+    setGalleryPanY(start.panY + dy);
+  };
+
+  const handleGalleryPointerUp = (e: React.PointerEvent<HTMLImageElement>) => {
+    if ((e.currentTarget as HTMLImageElement).hasPointerCapture(e.pointerId)) {
+      (e.currentTarget as HTMLImageElement).releasePointerCapture(e.pointerId);
+    }
+    setGalleryDragging(false);
+    if (!galleryMoved && galleryImages.length > 1) {
+      nextGallery();
     }
   };
 
   const handleRemovePhoto = async (stageIndex: number, photoUrl: string) => {
     if (!id) return;
     try {
-      const fileRef = ref(storage, photoUrl);
-      await deleteObject(fileRef);
-      const photoUrls = (stages[stageIndex].photoUrls || []).filter(url => url !== photoUrl);
-      const updatedStages = stages.map((s, i) => (i === stageIndex ? { ...s, photoUrls } : s));
-      setStages(updatedStages);
-      
-      const ref_doc = doc(firestoreBase, 'projects', id);
-      await updateDoc(ref_doc, {
-        stages: updatedStages,
-        updatedAt: new Date().toISOString(),
-      });
+      const updated = await projectsApi.deleteStagePhoto(id, stageIndex, photoUrl);
+      setProject(updated);
+      setStages(ensureStages(updated));
       present({ message: 'Изображение удалено', duration: 2000, position: 'bottom', color: 'success' });
     } catch (error) {
-      console.error('Ошибка удаления:', error);
+      present({
+        message: error instanceof Error ? error.message : 'Ошибка удаления изображения',
+        duration: 2200,
+        position: 'bottom',
+        color: 'danger',
+      });
     }
   };
 
   const handleSaveFinance = async () => {
     if (!id) return;
-    const ref = doc(firestoreBase, 'projects', id);
-    await updateDoc(ref, {
-      contractAmount,
-      paidAmount,
-      nextPaymentDate: nextPaymentDate || null,
-      lastPaymentDate: lastPaymentDate || null,
-      updatedAt: new Date().toISOString(),
-    });
-    setProject((prev) =>
-      prev
-        ? {
-            ...prev,
-            contractAmount,
-            paidAmount,
-            nextPaymentDate,
-            lastPaymentDate,
-          }
-        : prev
-    );
-    present({ message: 'Финансы обновлены', duration: 2000, position: 'bottom', color: 'success' });
+    try {
+      await persistProjectPatch({
+        contractAmount,
+        paidAmount,
+        nextPaymentDate: nextPaymentDate || '',
+        lastPaymentDate: lastPaymentDate || '',
+        updatedAt: new Date().toISOString(),
+      });
+      present({ message: 'Финансы обновлены', duration: 2000, position: 'bottom', color: 'success' });
+    } catch (error) {
+      present({
+        message: error instanceof Error ? error.message : 'Ошибка обновления финансов',
+        duration: 2200,
+        position: 'bottom',
+        color: 'danger',
+      });
+    }
   };
 
   const openEditStageModal = (index: number) => {
@@ -350,31 +402,37 @@ const ProjectDetail: React.FC = () => {
 
   const handleSaveStageDates = async () => {
     if (editingStageIndex === null || !id) return;
-    
+
     const updatedStages = stages.map((s, i) =>
-      i === editingStageIndex
-        ? { ...s, plannedStart: editingPlannedStart, plannedEnd: editingPlannedEnd }
-        : s
+      i === editingStageIndex ? { ...s, plannedStart: editingPlannedStart, plannedEnd: editingPlannedEnd } : s
     );
-    
+
     setStages(updatedStages);
-    const ref = doc(firestoreBase, 'projects', id);
-    await updateDoc(ref, {
-      stages: updatedStages,
-      updatedAt: new Date().toISOString(),
-    });
-    
-    setEditStageModalOpen(false);
-    setEditingStageIndex(null);
-    setEditingPlannedStart('');
-    setEditingPlannedEnd('');
-    present({ message: 'Даты этапа обновлены', duration: 2000, position: 'bottom', color: 'success' });
+    try {
+      await persistProjectPatch({ stages: updatedStages, updatedAt: new Date().toISOString() });
+      setEditStageModalOpen(false);
+      setEditingStageIndex(null);
+      setEditingPlannedStart('');
+      setEditingPlannedEnd('');
+      present({ message: 'Даты этапа обновлены', duration: 2000, position: 'bottom', color: 'success' });
+    } catch (error) {
+      present({
+        message: error instanceof Error ? error.message : 'Ошибка обновления дат этапа',
+        duration: 2200,
+        position: 'bottom',
+        color: 'danger',
+      });
+    }
   };
 
   if (!project) {
     return (
       <IonPage>
-        <IonHeader><IonToolbar><IonTitle>Загрузка...</IonTitle></IonToolbar></IonHeader>
+        <IonHeader>
+          <IonToolbar>
+            <IonTitle>Загрузка...</IonTitle>
+          </IonToolbar>
+        </IonHeader>
         <IonContent />
       </IonPage>
     );
@@ -405,7 +463,8 @@ const ProjectDetail: React.FC = () => {
           </IonCardHeader>
           <IonCardContent>
             <p><strong>ФИО клиента:</strong> {project.clientFio}</p>
-            <p><strong>Контакты:</strong> {project.clientContacts || '—'}</p>
+            <p><strong>Телефон:</strong> {project.clientPhone || project.clientContacts || '—'}</p>
+            <p><strong>Email:</strong> {project.clientEmail || '—'}</p>
             <p><strong>Адрес:</strong> {project.constructionAddress}</p>
             <p><strong>Тип:</strong> {project.projectType === 'typical' ? 'Типовой' : 'Индивидуальный'}</p>
             <p><strong>Площадь:</strong> {project.areaSqm} м²</p>
@@ -414,7 +473,9 @@ const ProjectDetail: React.FC = () => {
             <p><strong>План сдачи:</strong> {project.plannedEndDate || '—'}</p>
             {project.actualEndDate && <p><strong>Факт. сдача:</strong> {project.actualEndDate}</p>}
             <div className="project-progress ion-margin-top">
-              <IonLabel>Готовность: <strong>{progressPercent}%</strong></IonLabel>
+              <IonLabel>
+                Готовность: <strong>{progressPercent}%</strong>
+              </IonLabel>
               <div className="progress-bar">
                 <div className="progress-fill" style={{ width: `${progressPercent}%` }} />
               </div>
@@ -425,16 +486,10 @@ const ProjectDetail: React.FC = () => {
                 <h3>Камера объекта</h3>
                 {project.cameraUrl.startsWith('http') ? (
                   <>
-                    <video
-                      controls
-                      style={{ width: '100%', maxHeight: 320, background: '#000' }}
-                      src={project.cameraUrl}
-                    >
+                    <video controls style={{ width: '100%', maxHeight: 320, background: '#000' }} src={project.cameraUrl}>
                       Ваш браузер не поддерживает воспроизведение этого формата.
                     </video>
-                    <p style={{ fontSize: '0.8rem', opacity: 0.8 }}>
-                      Ожидается HTTP/HLS поток (например, прокси для RTSP).
-                    </p>
+                    <p style={{ fontSize: '0.8rem', opacity: 0.8 }}>Ожидается HTTP/HLS поток (например, прокси для RTSP).</p>
                   </>
                 ) : (
                   <>
@@ -456,26 +511,13 @@ const ProjectDetail: React.FC = () => {
             <IonCardTitle>Финансы</IonCardTitle>
           </IonCardHeader>
           <IonCardContent>
+            <p><strong>Сумма договора:</strong> {(project.contractAmount ?? contractAmount)?.toLocaleString('ru-RU') || 0} ₽</p>
             <p>
-              <strong>Сумма договора:</strong>{' '}
-              {(project.contractAmount ?? contractAmount)?.toLocaleString('ru-RU') || 0} ₽
+              <strong>Оплачено:</strong> {(project.paidAmount ?? paidAmount)?.toLocaleString('ru-RU') || '0'} ₽ ({paidPercent}%)
             </p>
-            <p>
-              <strong>Оплачено:</strong>{' '}
-              {(project.paidAmount ?? paidAmount)?.toLocaleString('ru-RU') || '0'} ₽ (
-              {paidPercent}%)
-            </p>
-            <p>
-              <strong>Задолженность:</strong> {debt.toLocaleString('ru-RU')} ₽
-            </p>
-            <p>
-              <strong>Дата последнего платежа:</strong>{' '}
-              {(project.lastPaymentDate ?? lastPaymentDate) || '—'}
-            </p>
-            <p>
-              <strong>Дата следующего платежа:</strong>{' '}
-              {(project.nextPaymentDate ?? nextPaymentDate) || '—'}
-            </p>
+            <p><strong>Задолженность:</strong> {debt.toLocaleString('ru-RU')} ₽</p>
+            <p><strong>Дата следующего платежа:</strong> {(project.nextPaymentDate ?? nextPaymentDate) || '—'}</p>
+            <p><strong>Дата последнего платежа:</strong> {(project.lastPaymentDate ?? lastPaymentDate) || '—'}</p>
 
             <div className="ion-margin-vertical">
               {debt === 0 ? (
@@ -509,20 +551,20 @@ const ProjectDetail: React.FC = () => {
                 </IonItem>
                 <IonItem>
                   <IonInput
-                    label="Дата следующего платежа"
-                    labelPlacement="floating"
-                    type="date"
-                    value={nextPaymentDate}
-                    onIonInput={(e) => setNextPaymentDate(String(e.detail.value ?? ''))}
-                  />
-                </IonItem>
-                <IonItem>
-                  <IonInput
                     label="Дата последнего платежа"
                     labelPlacement="floating"
                     type="date"
                     value={lastPaymentDate}
                     onIonInput={(e) => setLastPaymentDate(String(e.detail.value ?? ''))}
+                  />
+                </IonItem>
+                <IonItem>
+                  <IonInput
+                    label="Дата следующего платежа"
+                    labelPlacement="floating"
+                    type="date"
+                    value={nextPaymentDate}
+                    onIonInput={(e) => setNextPaymentDate(String(e.detail.value ?? ''))}
                   />
                 </IonItem>
                 <IonButton className="ion-margin-top" expand="block" onClick={handleSaveFinance}>
@@ -540,8 +582,8 @@ const ProjectDetail: React.FC = () => {
           <IonCardContent>
             <IonList>
               {stages.map((stage, index) => {
-                const displayStatus = markOverdue(stage);
-                const isOverdue = displayStatus === 'overdue';
+                const displayStatus = role === 'client' ? stage.status : markOverdue(stage);
+                const isOverdue = role !== 'client' && displayStatus === 'overdue';
                 return (
                   <div key={stage.id} className={isOverdue ? 'stage-overdue stage-item' : 'stage-item'}>
                     <IonItem>
@@ -554,9 +596,6 @@ const ProjectDetail: React.FC = () => {
                         </p>
                         {stage.responsible && <p>Ответственный: {stage.responsible}</p>}
                       </IonLabel>
-                      <IonChip color={isOverdue ? 'danger' : 'primary'} slot="end">
-                        {STAGE_STATUS_LABELS[displayStatus]}
-                      </IonChip>
                       {role !== 'client' && (
                         <>
                           <IonButton fill="clear" size="small" onClick={() => openEditStageModal(index)}>
@@ -575,42 +614,35 @@ const ProjectDetail: React.FC = () => {
                         </>
                       )}
                       {role === 'client' && (
-                        <IonSelect
-                          value={stage.status}
-                          disabled
-                          interface="action-sheet"
-                          placeholder="Статус"
-                        >
-                          <IonSelectOption value="not_started">Не начат</IonSelectOption>
-                          <IonSelectOption value="in_progress">В работе</IonSelectOption>
-                          <IonSelectOption value="completed">Завершён</IonSelectOption>
-                        </IonSelect>
+                        <IonChip color="primary" slot="end">
+                          {STAGE_STATUS_LABELS[stage.status]}
+                        </IonChip>
                       )}
                     </IonItem>
                     <div style={{ padding: '12px 16px' }}>
                       <div style={{ marginBottom: '10px' }}>
                         {role !== 'client' && (
                           <>
-                            <label htmlFor={`file-input-${index}`} style={{ display: 'block', marginBottom: '8px', fontSize: '0.9rem', color: 'var(--ion-color-primary)' }}>
+                            <label
+                              htmlFor={`file-input-${index}`}
+                              style={{ display: 'block', marginBottom: '8px', fontSize: '0.9rem', color: 'var(--ion-color-primary)' }}
+                            >
                               Загрузить фото этапа:
                             </label>
                             <input
                               id={`file-input-${index}`}
+                              className="stage-file-input"
                               type="file"
+                              multiple
                               accept="image/*"
                               onChange={(e) => {
-                                const file = e.target.files?.[0];
-                                if (file) handleStageImageUpload(index, file);
+                                const files = e.target.files ? Array.from(e.target.files) : [];
+                                if (files.length) handleStageImageUpload(index, files);
                               }}
                               disabled={uploadingStageIndex === index}
                               style={{ fontSize: '0.85rem' }}
                             />
                           </>
-                        )}
-                        {role === 'client' && (
-                          <p style={{ fontSize: '0.85rem', color: 'var(--ion-color-medium)', margin: '8px 0' }}>
-                            Просмотр фото доступен (загрузка недоступна для клиентов)
-                          </p>
                         )}
                       </div>
                       {stage.photoUrls && stage.photoUrls.length > 0 && (
@@ -620,33 +652,52 @@ const ProjectDetail: React.FC = () => {
                           </p>
                           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(80px, 1fr))', gap: '8px' }}>
                             {stage.photoUrls.map((photoUrl, idx) => (
-                              <div key={idx} style={{ position: 'relative', borderRadius: '8px', overflow: 'hidden', backgroundColor: '#f0f0f0' }}>
+                              <div
+                                key={idx}
+                                style={{
+                                  position: 'relative',
+                                  borderRadius: '8px',
+                                  overflow: 'hidden',
+                                  backgroundColor: '#f0f0f0',
+                                }}
+                              >
                                 <img
-                                  src={photoUrl}
+                                  src={backendAssetUrl(photoUrl)}
                                   alt={`Stage ${index + 1} photo ${idx + 1}`}
                                   style={{ width: '100%', height: '80px', objectFit: 'cover', display: 'block' }}
+                                  onClick={() => openGallery(stage.photoUrls || [], idx)}
                                 />
-                                <button
-                                  onClick={() => handleRemovePhoto(index, photoUrl)}
-                                  style={{
-                                    position: 'absolute',
-                                    top: 0,
-                                    right: 0,
-                                    background: 'rgba(255, 0, 0, 0.8)',
-                                    color: 'white',
-                                    border: 'none',
-                                    padding: '2px 6px',
-                                    cursor: 'pointer',
-                                    fontSize: '12px',
-                                    borderRadius: '0 8px 0 4px',
-                                  }}
-                                >
-                                  ✕
-                                </button>
+                                {role !== 'client' && (
+                                  <button
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleRemovePhoto(index, photoUrl);
+                                    }}
+                                    style={{
+                                      position: 'absolute',
+                                      top: 0,
+                                      right: 0,
+                                      background: 'rgba(255, 0, 0, 0.8)',
+                                      color: 'white',
+                                      border: 'none',
+                                      padding: '2px 6px',
+                                      cursor: 'pointer',
+                                      fontSize: '12px',
+                                      borderRadius: '0 8px 0 4px',
+                                    }}
+                                  >
+                                    x
+                                  </button>
+                                )}
                               </div>
                             ))}
                           </div>
                         </div>
+                      )}
+                      {(!stage.photoUrls || stage.photoUrls.length === 0) && (
+                        <p style={{ fontSize: '0.85rem', color: 'var(--ion-color-medium)', margin: '8px 0' }}>
+                          Фото пока не добавлено
+                        </p>
                       )}
                     </div>
                   </div>
@@ -657,23 +708,17 @@ const ProjectDetail: React.FC = () => {
             {parsedStages.length > 0 && minTime !== null && maxTime !== null && (
               <div className="gantt-container">
                 <IonLabel>
-                  Диаграмма Gantt (плановые даты):{' '}
-                  {new Date(minTime).toLocaleDateString('ru-RU')} –{' '}
+                  Диаграмма Gantt (плановые даты): {new Date(minTime).toLocaleDateString('ru-RU')} –{' '}
                   {new Date(maxTime).toLocaleDateString('ru-RU')}
                 </IonLabel>
                 {parsedStages.map((s) => {
-                  const startOffset =
-                    ((s.start.getTime() - minTime) / totalMs) * 100;
-                  const width =
-                    ((s.end.getTime() - s.start.getTime()) / totalMs) * 100;
+                  const startOffset = ((s.start.getTime() - minTime) / totalMs) * 100;
+                  const width = ((s.end.getTime() - s.start.getTime()) / totalMs) * 100;
                   return (
                     <div key={s.id} className="gantt-row">
                       <div className="gantt-row-label">{s.name}</div>
                       <div className="gantt-bar-track">
-                        <div
-                          className="gantt-bar"
-                          style={{ left: `${startOffset}%`, width: `${width}%` }}
-                        />
+                        <div className="gantt-bar" style={{ left: `${startOffset}%`, width: `${width}%` }} />
                       </div>
                     </div>
                   );
@@ -688,7 +733,7 @@ const ProjectDetail: React.FC = () => {
             <IonToolbar>
               <IonButtons slot="end">
                 <IonButton onClick={() => setEditModalOpen(false)}>
-                  <IonIcon slot="icon-only" icon={close}></IonIcon>
+                  <IonIcon slot="icon-only" icon={close} />
                 </IonButton>
               </IonButtons>
               <IonTitle>Редактировать объект</IonTitle>
@@ -716,10 +761,19 @@ const ProjectDetail: React.FC = () => {
             </IonItem>
             <IonItem>
               <IonInput
-                label="Контакты"
+                label="Телефон"
                 labelPlacement="floating"
-                value={editClientContacts}
-                onIonInput={(e) => setEditClientContacts(String(e.detail.value ?? ''))}
+                value={editClientPhone}
+                onIonInput={(e) => setEditClientPhone(String(e.detail.value ?? ''))}
+              />
+            </IonItem>
+            <IonItem>
+              <IonInput
+                label="Email"
+                labelPlacement="floating"
+                type="email"
+                value={editClientEmail}
+                onIonInput={(e) => setEditClientEmail(String(e.detail.value ?? ''))}
               />
             </IonItem>
             <IonItem>
@@ -746,12 +800,72 @@ const ProjectDetail: React.FC = () => {
           </IonContent>
         </IonModal>
 
+        <IonModal isOpen={galleryOpen} onDidDismiss={() => setGalleryOpen(false)}>
+          <IonHeader>
+            <IonToolbar>
+              <IonTitle>
+                Фото {galleryImages.length ? `${galleryIndex + 1}/${galleryImages.length}` : ''}
+              </IonTitle>
+              <IonButtons slot="end">
+                <IonButton onClick={() => setGalleryOpen(false)}>
+                  <IonIcon slot="icon-only" icon={close} />
+                </IonButton>
+              </IonButtons>
+            </IonToolbar>
+          </IonHeader>
+          <IonContent className="ion-padding">
+            {galleryImages.length > 0 && (
+              <div style={{ display: 'grid', gridTemplateColumns: '40px 1fr 40px', alignItems: 'center', gap: '12px' }}>
+                <IonButton fill="clear" onClick={prevGallery}>
+                  <IonIcon icon={chevronBackOutline} />
+                </IonButton>
+                <div>
+                  <img
+                    src={backendAssetUrl(galleryImages[galleryIndex])}
+                    alt={`Фото ${galleryIndex + 1}`}
+                    onPointerDown={handleGalleryPointerDown}
+                    onPointerMove={handleGalleryPointerMove}
+                    onPointerUp={handleGalleryPointerUp}
+                    onPointerCancel={handleGalleryPointerUp}
+                    style={{
+                      width: '100%',
+                      maxHeight: '70vh',
+                      objectFit: 'contain',
+                      background: '#111',
+                      borderRadius: '10px',
+                      transform: `translate(${galleryPanX}px, ${galleryPanY}px) scale(${galleryZoom})`,
+                      transformOrigin: 'center center',
+                      transition: 'transform 0.2s ease',
+                      cursor: galleryZoom > 1 ? 'grab' : 'pointer',
+                      touchAction: galleryZoom > 1 ? 'none' : 'auto',
+                    }}
+                  />
+                  <div style={{ display: 'flex', justifyContent: 'center', gap: '8px', marginTop: '12px' }}>
+                    <IonButton size="small" onClick={zoomOutGallery} disabled={galleryZoom <= 1}>
+                      -
+                    </IonButton>
+                    <IonButton size="small" onClick={() => setGalleryZoom(1)}>
+                      100%
+                    </IonButton>
+                    <IonButton size="small" onClick={zoomInGallery} disabled={galleryZoom >= 3}>
+                      +
+                    </IonButton>
+                  </div>
+                </div>
+                <IonButton fill="clear" onClick={nextGallery}>
+                  <IonIcon icon={chevronForwardOutline} />
+                </IonButton>
+              </div>
+            )}
+          </IonContent>
+        </IonModal>
+
         <IonModal isOpen={editStageModalOpen} onDidDismiss={() => setEditStageModalOpen(false)}>
           <IonHeader>
             <IonToolbar>
               <IonButtons slot="end">
                 <IonButton onClick={() => setEditStageModalOpen(false)}>
-                  <IonIcon slot="icon-only" icon={close}></IonIcon>
+                  <IonIcon slot="icon-only" icon={close} />
                 </IonButton>
               </IonButtons>
               <IonTitle>Редактировать даты этапа</IonTitle>
