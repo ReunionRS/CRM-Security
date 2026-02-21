@@ -75,7 +75,7 @@ const Menu: React.FC = () => {
           <div slot="start" className="menu-header">
             <img src="/img/logo.png" alt="Logo" className="menu-logo" />
             <div className="menu-title">
-              <h2>CRM Строй</h2>
+              <h2>Март Строй</h2>
               {role && <span className="menu-role">{ROLE_LABELS[role]}</span>}
             </div>
           </div>

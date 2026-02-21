@@ -322,7 +322,7 @@ const Documents: React.FC = () => {
           <IonButtons slot="start">
             <IonMenuButton />
           </IonButtons>
-          <IonTitle>CRM Строй — Документы</IonTitle>
+          <IonTitle>Март Строй — Документы</IonTitle>
           <LogOut />
         </IonToolbar>
       </IonHeader>

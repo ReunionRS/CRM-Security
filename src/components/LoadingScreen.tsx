@@ -10,13 +10,13 @@ const LoadingScreen: React.FC = () => (
         <img
           className="loading-logo-img"
           src="/png/logo.png"
-          alt="CRM Строй"
+          alt="Март Строй"
           onError={(e) => {
             (e.currentTarget as HTMLImageElement).src = logoFallback;
           }}
         />
       </div>
-      <h1 className="loading-title">CRM Строй</h1>
+      <h1 className="loading-title">Март Строй</h1>
       <p className="loading-subtitle">Каркасные дома</p>
       <IonSpinner name="crescent" color="primary" className="loading-spinner" />
     </div>

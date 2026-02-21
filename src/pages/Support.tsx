@@ -221,7 +221,7 @@ const Support: React.FC = () => {
           <IonButtons slot="start">
             <IonMenuButton />
           </IonButtons>
-          <IonTitle>CRM Строй — Поддержка</IonTitle>
+          <IonTitle>Март Строй — Поддержка</IonTitle>
           <LogOut />
         </IonToolbar>
       </IonHeader>

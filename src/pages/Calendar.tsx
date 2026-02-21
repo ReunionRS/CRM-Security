@@ -95,7 +95,7 @@ const Calendar: React.FC = () => {
           <IonButtons slot="start">
             <IonMenuButton />
           </IonButtons>
-          <IonTitle>CRM Строй — Календарь</IonTitle>
+          <IonTitle>Март Строй — Календарь</IonTitle>
           <LogOut />
         </IonToolbar>
       </IonHeader>

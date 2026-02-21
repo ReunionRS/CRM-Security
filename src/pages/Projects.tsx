@@ -26,7 +26,7 @@ const Projects: React.FC = () => {
               <IonMenuButton />
             </IonButtons>
             <IonTitle>
-              {role === 'client' ? 'Мой дом' : 'CRM Строй — Объекты'}
+              {role === 'client' ? 'Мой дом' : 'Март Строй — Объекты'}
             </IonTitle>
             <LogOut />
           </IonToolbar>

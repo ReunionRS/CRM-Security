@@ -25,7 +25,7 @@ const Reports: React.FC = () => {
           <IonButtons slot="start">
             <IonMenuButton />
           </IonButtons>
-          <IonTitle>CRM Строй — Отчёты</IonTitle>
+          <IonTitle>Март Строй — Отчёты</IonTitle>
           <LogOut />
         </IonToolbar>
       </IonHeader>

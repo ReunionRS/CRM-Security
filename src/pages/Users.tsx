@@ -14,7 +14,7 @@ const Users: React.FC = () => {
                             <IonButtons slot="start">
                                 <IonMenuButton></IonMenuButton>
                             </IonButtons>
-                            <IonTitle>CRM Строй</IonTitle>
+                            <IonTitle>Март Строй</IonTitle>
                             <LogOut></LogOut>
                         </IonToolbar>
                     </IonHeader>

@@ -78,6 +78,13 @@ function toStageAnchorId(index: number): string {
   return `stage-${index}`;
 }
 
+function formatDateRu(value?: string): string {
+  if (!value) return '—';
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return value;
+  return parsed.toLocaleDateString('ru-RU');
+}
+
 const ProjectDetail: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const location = useLocation();
@@ -548,8 +555,8 @@ const ProjectDetail: React.FC = () => {
               <strong>Оплачено:</strong> {(project.paidAmount ?? paidAmount)?.toLocaleString('ru-RU') || '0'} ₽ ({paidPercent}%)
             </p>
             <p><strong>Задолженность:</strong> {debt.toLocaleString('ru-RU')} ₽</p>
-            <p><strong>Дата следующего платежа:</strong> {(project.nextPaymentDate ?? nextPaymentDate) || '—'}</p>
-            <p><strong>Дата последнего платежа:</strong> {(project.lastPaymentDate ?? lastPaymentDate) || '—'}</p>
+            <p><strong>Дата последнего платежа:</strong> {formatDateRu(project.lastPaymentDate ?? lastPaymentDate)}</p>
+            <p><strong>Дата следующего платежа:</strong> {formatDateRu(project.nextPaymentDate ?? nextPaymentDate)}</p>
 
             <div className="ion-margin-vertical">
               {debt === 0 ? (
@@ -627,9 +634,9 @@ const ProjectDetail: React.FC = () => {
                       <IonLabel>
                         <h2>{stage.name}</h2>
                         <p>
-                          План: {stage.plannedStart || '—'} – {stage.plannedEnd || '—'}
-                          {stage.actualStart && ` • Факт нач.: ${stage.actualStart}`}
-                          {stage.actualEnd && ` • Факт ок.: ${stage.actualEnd}`}
+                          План: {formatDateRu(stage.plannedStart)} – {formatDateRu(stage.plannedEnd)}
+                          {stage.actualStart && ` • Факт нач.: ${formatDateRu(stage.actualStart)}`}
+                          {stage.actualEnd && ` • Факт ок.: ${formatDateRu(stage.actualEnd)}`}
                         </p>
                         {stage.responsible && <p>Ответственный: {stage.responsible}</p>}
                         <details style={{ marginTop: '8px' }}>

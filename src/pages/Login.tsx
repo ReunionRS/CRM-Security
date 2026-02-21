@@ -61,7 +61,7 @@ const Login: React.FC = () => {
       <form className="ion-margin" onSubmit={signIn}>
         <IonCardHeader>
           <IonTitle color="primary" className="ion-text-center">
-            CRM Строй
+            Март Строй
           </IonTitle>
         </IonCardHeader>
         <IonList>
