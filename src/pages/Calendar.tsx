@@ -28,6 +28,7 @@ interface CalendarEvent {
   projectId: string;
   projectAddress: string;
   stageName: string;
+  stageIndex: number;
   date: string;
   type: 'start' | 'end';
 }
@@ -47,12 +48,13 @@ const Calendar: React.FC = () => {
         if (role === 'client' && firestoreUserId && p.clientUserId !== firestoreUserId) {
           return;
         }
-        (p.stages || []).forEach((s) => {
+        (p.stages || []).forEach((s, stageIndex) => {
           if (s.plannedStart) {
             evs.push({
               projectId: p.id!,
               projectAddress: p.constructionAddress || 'Без адреса',
               stageName: s.name,
+              stageIndex,
               date: s.plannedStart,
               type: 'start',
             });
@@ -62,6 +64,7 @@ const Calendar: React.FC = () => {
               projectId: p.id!,
               projectAddress: p.constructionAddress || 'Без адреса',
               stageName: s.name,
+              stageIndex,
               date: s.plannedEnd,
               type: 'end',
             });
@@ -119,7 +122,7 @@ const Calendar: React.FC = () => {
                       </IonLabel>
                     </IonItem>
                     {dayEvents.map((e, idx) => (
-                      <IonItem key={idx} routerLink={`/projects/${e.projectId}`}>
+                      <IonItem key={idx} routerLink={`/projects/${e.projectId}?stageIndex=${e.stageIndex}`}>
                         <IonLabel>
                           <div>{e.stageName}</div>
                           <div style={{ fontSize: '0.8rem', opacity: 0.8 }}>{e.projectAddress}</div>

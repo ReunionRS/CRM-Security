@@ -109,6 +109,7 @@ html.ion-palette-dark {
 }
 
 @media (prefers-color-scheme: dark) {
+  html:not(.theme-light) {
   /*
    * Dark Colors
    * -------------------------------------------
@@ -264,6 +265,7 @@ html.ion-palette-dark {
     --ion-tab-bar-background: #1f1f1f;
 
     --ion-card-background: #1e1e1e;
+  }
   }
 }
 

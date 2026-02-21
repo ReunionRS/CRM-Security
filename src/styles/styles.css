@@ -199,6 +199,12 @@ html:not(.ion-palette-dark) .theme-toggle-button {
     border-left: 4px solid var(--ion-color-danger);
 }
 
+.stage-item-focused {
+    border-left: 4px solid var(--ion-color-primary);
+    background: rgba(var(--ion-color-primary-rgb), 0.08);
+    transition: background 0.25s ease;
+}
+
 /* Gantt по этапам */
 .gantt-container {
     margin-top: 16px;
@@ -235,6 +241,54 @@ html:not(.ion-palette-dark) .theme-toggle-button {
     bottom: 0;
     background: var(--ion-color-primary);
     border-radius: 6px;
+}
+
+.support-chat-list {
+    max-height: 56vh;
+    overflow-y: auto;
+    border: 1px solid rgba(0, 0, 0, 0.08);
+    border-radius: 10px;
+    padding: 10px;
+}
+
+html.ion-palette-dark .support-chat-list {
+    border-color: rgba(255, 255, 255, 0.12);
+}
+
+.support-message {
+    background: rgba(0, 0, 0, 0.03);
+    border-radius: 10px;
+    padding: 10px;
+    margin-bottom: 10px;
+}
+
+html.ion-palette-dark .support-message {
+    background: rgba(255, 255, 255, 0.06);
+}
+
+.support-message-own {
+    border-left: 3px solid var(--ion-color-primary);
+}
+
+.support-message-meta {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    font-size: 0.8rem;
+    opacity: 0.9;
+    flex-wrap: wrap;
+}
+
+.support-message-client {
+    font-size: 0.8rem;
+    opacity: 0.8;
+    margin-top: 4px;
+}
+
+.support-message-text {
+    margin-top: 8px;
+    white-space: pre-wrap;
+    word-break: break-word;
 }
 
 /* User Cards Grid */

@@ -9,7 +9,7 @@ import {
   useIonToast,
   IonLabel,
 } from '@ionic/react';
-import { Project, CONSTRUCTION_STAGES, ProjectStage } from '../models/Project';
+import { Project, getDefaultConstructionStages } from '../models/Project';
 import { projectsApi, usersApi } from '../api/services';
 
 const ProjectCreate: React.FC = () => {
@@ -31,13 +31,7 @@ const ProjectCreate: React.FC = () => {
     present({ message: text, duration: 2000, position: 'bottom', color });
   };
 
-  const defaultStages: ProjectStage[] = CONSTRUCTION_STAGES.map((name, i) => ({
-    id: `stage-${i}`,
-    name,
-    plannedStart: '',
-    plannedEnd: '',
-    status: 'not_started',
-  }));
+  const defaultStages = getDefaultConstructionStages();
 
   useEffect(() => {
     const loadClients = async () => {

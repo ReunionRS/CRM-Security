@@ -8,6 +8,7 @@ import ProjectDetail from './pages/ProjectDetail';
 import Documents from './pages/Documents';
 import Calendar from './pages/Calendar';
 import Reports from './pages/Reports';
+import Support from './pages/Support';
 
 import '@ionic/react/css/core.css';
 import '@ionic/react/css/normalize.css';
@@ -35,6 +36,7 @@ const App: React.FC = () => (
         <ProtectedRoute exact path="/projects" component={Projects} />
         <ProtectedRoute exact path="/projects/:id" component={ProjectDetail} />
         <ProtectedRoute exact path="/documents" component={Documents} />
+        <ProtectedRoute exact path="/support" component={Support} />
         <ProtectedRoute
           exact
           path="/calendar"

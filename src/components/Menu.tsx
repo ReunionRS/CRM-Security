@@ -24,6 +24,7 @@ import {
   barChartOutline,
   moon,
   sunny,
+  chatbubblesOutline,
 } from 'ionicons/icons';
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
@@ -49,6 +50,8 @@ const Menu: React.FC = () => {
   const canSeeUsers = (r: UserRole | null) => r === 'admin' || r === 'director';
 
   const applyTheme = (dark: boolean) => {
+    document.documentElement.classList.toggle('theme-dark', dark);
+    document.documentElement.classList.toggle('theme-light', !dark);
     if (dark) {
       document.documentElement.classList.add('ion-palette-dark');
     } else {
@@ -104,6 +107,20 @@ const Menu: React.FC = () => {
               <IonItem lines="full" detail>
                 <IonIcon className="menu-item-icon" slot="start" ios={documentTextOutline} md={documentTextSharp} />
                 <IonLabel>Документы</IonLabel>
+              </IonItem>
+            </IonRouterLink>
+          </IonMenuToggle>
+        </IonItemGroup>
+        <IonItemGroup>
+          <IonItemDivider onClick={() => toggleSubMenu('support')}>
+            <IonLabel>Поддержка</IonLabel>
+            <IonIcon className="menu-item-icon" slot="end" ios={chevronDownOutline} md={chevronDownSharp} />
+          </IonItemDivider>
+          <IonMenuToggle hidden={subMenu.support} autoHide={false}>
+            <IonRouterLink href="/support">
+              <IonItem lines="full" detail>
+                <IonIcon className="menu-item-icon" slot="start" ios={chatbubblesOutline} md={chatbubblesOutline} />
+                <IonLabel>Чат поддержки</IonLabel>
               </IonItem>
             </IonRouterLink>
           </IonMenuToggle>

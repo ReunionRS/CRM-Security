@@ -98,6 +98,17 @@ const toUser = (row) => ({
   role: row.role,
 });
 
+const toSupportMessage = (row) => ({
+  id: row.id,
+  clientUserId: row.client_user_id,
+  messageText: row.message_text,
+  createdAt: row.created_at,
+  senderId: row.sender_user_id,
+  senderFio: row.sender_fio,
+  senderRole: row.sender_role,
+  clientFio: row.client_fio,
+});
+
 const signToken = (user) =>
   jwt.sign({ id: user.id, email: user.email, role: user.role }, JWT_SECRET, { expiresIn: '7d' });
 
@@ -530,6 +541,94 @@ app.delete('/api/documents/:id', authRequired, async (req, res) => {
 
   await pool.query('DELETE FROM documents WHERE id = $1', [req.params.id]);
   res.json({ ok: true });
+});
+
+app.get('/api/support/messages', authRequired, async (req, res) => {
+  try {
+    const isClient = req.user.role === 'client';
+    const clientUserId = req.query.clientUserId ? String(req.query.clientUserId) : null;
+
+    const params = [];
+    const where = [];
+
+    if (isClient) {
+      params.push(req.user.id);
+      where.push(`m.client_user_id = $${params.length}`);
+    } else if (clientUserId) {
+      params.push(clientUserId);
+      where.push(`m.client_user_id = $${params.length}`);
+    }
+
+    const whereSql = where.length ? `WHERE ${where.join(' AND ')}` : '';
+    const { rows } = await pool.query(
+      `
+      SELECT
+        m.*,
+        sender.fio AS sender_fio,
+        sender.role AS sender_role,
+        client.fio AS client_fio
+      FROM support_messages m
+      INNER JOIN users sender ON sender.id = m.sender_user_id
+      INNER JOIN users client ON client.id = m.client_user_id
+      ${whereSql}
+      ORDER BY m.created_at ASC
+      `,
+      params
+    );
+
+    res.json(rows.map(toSupportMessage));
+  } catch {
+    res.status(500).json({ error: 'Ошибка загрузки чата поддержки' });
+  }
+});
+
+app.post('/api/support/messages', authRequired, async (req, res) => {
+  try {
+    const messageText = String(req.body.messageText || '').trim();
+    if (!messageText) return res.status(400).json({ error: 'Сообщение не может быть пустым' });
+
+    const isClient = req.user.role === 'client';
+    let clientUserId = isClient ? req.user.id : String(req.body.clientUserId || '').trim();
+
+    if (!clientUserId) {
+      return res.status(400).json({ error: 'Выберите клиента для переписки' });
+    }
+
+    const clientUser = await pool.query('SELECT id, role FROM users WHERE id = $1 LIMIT 1', [clientUserId]);
+    if (!clientUser.rows.length || clientUser.rows[0].role !== 'client') {
+      return res.status(400).json({ error: 'Клиент не найден' });
+    }
+
+    const id = randomUUID();
+    const { rows } = await pool.query(
+      `
+      INSERT INTO support_messages (id, client_user_id, sender_user_id, message_text)
+      VALUES ($1, $2, $3, $4)
+      RETURNING id
+      `,
+      [id, clientUserId, req.user.id, messageText]
+    );
+
+    const { rows: messageRows } = await pool.query(
+      `
+      SELECT
+        m.*,
+        sender.fio AS sender_fio,
+        sender.role AS sender_role,
+        client.fio AS client_fio
+      FROM support_messages m
+      INNER JOIN users sender ON sender.id = m.sender_user_id
+      INNER JOIN users client ON client.id = m.client_user_id
+      WHERE m.id = $1
+      LIMIT 1
+      `,
+      [rows[0].id]
+    );
+
+    res.status(201).json(toSupportMessage(messageRows[0]));
+  } catch {
+    res.status(500).json({ error: 'Ошибка отправки сообщения' });
+  }
 });
 
 app.post(

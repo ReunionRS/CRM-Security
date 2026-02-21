@@ -29,4 +29,15 @@ export interface DocumentRecord {
   uploadedBy?: string;
 }
 
+export interface SupportMessage {
+  id: string;
+  clientUserId: string;
+  messageText: string;
+  createdAt: string;
+  senderId: string;
+  senderFio: string;
+  senderRole: UserRole;
+  clientFio: string;
+}
+
 export type ProjectPayload = Project;

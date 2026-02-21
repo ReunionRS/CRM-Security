@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Project, CONSTRUCTION_STAGES } from '../models/Project';
+import { Project, getDefaultConstructionStages, CONSTRUCTION_STAGES } from '../models/Project';
 import {
   IonCard,
   IonCardHeader,
@@ -58,15 +58,7 @@ const ProjectList: React.FC = () => {
     setProjects(
       list.map((project) => ({
         ...project,
-        stages:
-          project.stages ||
-          CONSTRUCTION_STAGES.map((name, i) => ({
-            id: `stage-${i}`,
-            name,
-            plannedStart: '',
-            plannedEnd: '',
-            status: 'not_started' as const,
-          })),
+        stages: project.stages || getDefaultConstructionStages(),
       }))
     );
   };

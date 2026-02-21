@@ -1,5 +1,5 @@
 import { apiRequest, downloadUrl } from './http';
-import type { AppUser, AuthPayload, DocumentRecord, ProjectPayload } from './types';
+import type { AppUser, AuthPayload, DocumentRecord, ProjectPayload, SupportMessage } from './types';
 import type { UserRole } from '../models/Roles';
 import type { Project } from '../models/Project';
 
@@ -81,4 +81,18 @@ export const documentsApi = {
       method: 'DELETE',
     }),
   download: (id: string) => downloadUrl(`/documents/${id}/download`),
+};
+
+export const supportApi = {
+  list: (filter?: { clientUserId?: string }) => {
+    const params = new URLSearchParams();
+    if (filter?.clientUserId) params.set('clientUserId', filter.clientUserId);
+    const query = params.toString();
+    return apiRequest<SupportMessage[]>(`/support/messages${query ? `?${query}` : ''}`);
+  },
+  send: (input: { messageText: string; clientUserId?: string }) =>
+    apiRequest<SupportMessage>('/support/messages', {
+      method: 'POST',
+      body: JSON.stringify(input),
+    }),
 };

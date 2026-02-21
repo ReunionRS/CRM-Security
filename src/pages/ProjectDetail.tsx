@@ -1,6 +1,13 @@
 import React, { useEffect, useState } from 'react';
-import { useParams } from 'react-router-dom';
-import { Project, ProjectStage, CONSTRUCTION_STAGES, StageStatus } from '../models/Project';
+import { useLocation, useParams } from 'react-router-dom';
+import {
+  Project,
+  ProjectStage,
+  CONSTRUCTION_STAGES,
+  StageStatus,
+  STAGE_DESCRIPTION_ITEMS,
+  getDefaultConstructionStages,
+} from '../models/Project';
 import {
   IonBackButton,
   IonButtons,
@@ -54,24 +61,29 @@ function isStageOverdue(stage: ProjectStage): boolean {
 
 function ensureStages(project: Project): ProjectStage[] {
   const existing = project.stages || [];
+  const defaults = getDefaultConstructionStages();
   return CONSTRUCTION_STAGES.map((name, i) => {
     const found = existing.find((s) => s.name === name);
-    return (
-      found || {
-        id: `stage-${i}`,
-        name,
-        plannedStart: '',
-        plannedEnd: '',
-        status: 'not_started' as StageStatus,
-      }
-    );
+    const fallback = defaults[i];
+    if (!found) return fallback;
+    return {
+      ...fallback,
+      ...found,
+      comments: found.comments || STAGE_DESCRIPTION_ITEMS[name].join('\n'),
+    };
   });
+}
+
+function toStageAnchorId(index: number): string {
+  return `stage-${index}`;
 }
 
 const ProjectDetail: React.FC = () => {
   const { id } = useParams<{ id: string }>();
+  const location = useLocation();
   const [project, setProject] = useState<Project | null>(null);
   const [stages, setStages] = useState<ProjectStage[]>([]);
+  const [focusedStageIndex, setFocusedStageIndex] = useState<number | null>(null);
   const [present] = useIonToast();
   const { role } = useAuth();
 
@@ -144,6 +156,26 @@ const ProjectDetail: React.FC = () => {
     };
     loadClients().catch(() => {});
   }, []);
+
+  useEffect(() => {
+    if (!stages.length) return;
+
+    const searchParams = new URLSearchParams(location.search);
+    const stageIndexRaw = searchParams.get('stageIndex');
+    if (!stageIndexRaw) return;
+
+    const stageIndex = Number(stageIndexRaw);
+    if (!Number.isInteger(stageIndex) || stageIndex < 0 || stageIndex >= stages.length) return;
+
+    const anchorId = toStageAnchorId(stageIndex);
+    requestAnimationFrame(() => {
+      const target = document.getElementById(anchorId);
+      if (!target) return;
+      target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      setFocusedStageIndex(stageIndex);
+      window.setTimeout(() => setFocusedStageIndex((prev) => (prev === stageIndex ? null : prev)), 2000);
+    });
+  }, [location.search, stages]);
 
   const persistProjectPatch = async (patch: Partial<Project>) => {
     if (!id) return;
@@ -584,8 +616,13 @@ const ProjectDetail: React.FC = () => {
               {stages.map((stage, index) => {
                 const displayStatus = role === 'client' ? stage.status : markOverdue(stage);
                 const isOverdue = role !== 'client' && displayStatus === 'overdue';
+                const isFocused = focusedStageIndex === index;
                 return (
-                  <div key={stage.id} className={isOverdue ? 'stage-overdue stage-item' : 'stage-item'}>
+                  <div
+                    key={stage.id}
+                    id={toStageAnchorId(index)}
+                    className={`${isOverdue ? 'stage-overdue ' : ''}stage-item${isFocused ? ' stage-item-focused' : ''}`}
+                  >
                     <IonItem>
                       <IonLabel>
                         <h2>{stage.name}</h2>
@@ -595,6 +632,18 @@ const ProjectDetail: React.FC = () => {
                           {stage.actualEnd && ` • Факт ок.: ${stage.actualEnd}`}
                         </p>
                         {stage.responsible && <p>Ответственный: {stage.responsible}</p>}
+                        <details style={{ marginTop: '8px' }}>
+                          <summary style={{ cursor: 'pointer', color: 'var(--ion-color-primary)' }}>Описание</summary>
+                          <ul style={{ margin: '8px 0 0 16px', padding: 0 }}>
+                            {(stage.comments || '')
+                              .split('\n')
+                              .map((line) => line.trim())
+                              .filter(Boolean)
+                              .map((line, idx) => (
+                                <li key={idx}>{line}</li>
+                              ))}
+                          </ul>
+                        </details>
                       </IonLabel>
                       {role !== 'client' && (
                         <>
