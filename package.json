@@ -8,12 +8,17 @@
     "server:dev": "npm --prefix server run dev",
     "server:start": "npm --prefix server run start",
     "build": "tsc && vite build",
+    "cap:sync": "npx cap sync",
+    "android:add": "npx cap add android",
+    "android:open": "npx cap open android",
+    "apk:debug": "cd android && ./gradlew assembleDebug",
     "preview": "vite preview",
     "test.e2e": "cypress run",
     "test.unit": "vitest",
     "lint": "eslint"
   },
   "dependencies": {
+    "@capacitor/android": "5.7.0",
     "@capacitor/app": "5.0.7",
     "@capacitor/core": "5.7.0",
     "@capacitor/haptics": "5.0.7",
@@ -58,6 +63,7 @@
     "terser": "^5.4.0",
     "typescript": "^5.1.6",
     "vite": "^5.0.0",
+    "vite-plugin-pwa": "^1.2.0",
     "vitest": "^0.34.6"
   },
   "description": "An Ionic project"

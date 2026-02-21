@@ -31,3 +31,7 @@ yarn-error.log*
 
 # Optional eslint cache
 .eslintcache
+
+# local toolchains
+.local-jdks/
+android/local.properties
