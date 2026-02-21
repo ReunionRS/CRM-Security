@@ -33,6 +33,7 @@ export interface SupportMessage {
   id: string;
   clientUserId: string;
   messageText: string;
+  isReadByAdmin: boolean;
   createdAt: string;
   senderId: string;
   senderFio: string;

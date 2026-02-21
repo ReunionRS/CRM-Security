@@ -95,4 +95,12 @@ export const supportApi = {
       method: 'POST',
       body: JSON.stringify(input),
     }),
+  markRead: (clientUserId: string) =>
+    apiRequest<{ ok: boolean }>(`/support/chats/${clientUserId}/read`, {
+      method: 'PATCH',
+    }),
+  removeChat: (clientUserId: string) =>
+    apiRequest<{ ok: boolean }>(`/support/chats/${clientUserId}`, {
+      method: 'DELETE',
+    }),
 };

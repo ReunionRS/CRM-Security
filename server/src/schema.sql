@@ -52,6 +52,7 @@ CREATE TABLE IF NOT EXISTS support_messages (
   client_user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   sender_user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   message_text TEXT NOT NULL,
+  is_read_by_admin BOOLEAN NOT NULL DEFAULT FALSE,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
@@ -60,6 +61,7 @@ ALTER TABLE documents ADD COLUMN IF NOT EXISTS size_bytes BIGINT;
 ALTER TABLE documents ADD COLUMN IF NOT EXISTS version INTEGER NOT NULL DEFAULT 1;
 ALTER TABLE documents ADD COLUMN IF NOT EXISTS client_user_id TEXT REFERENCES users(id) ON DELETE SET NULL;
 ALTER TABLE projects ADD COLUMN IF NOT EXISTS client_phone TEXT;
+ALTER TABLE support_messages ADD COLUMN IF NOT EXISTS is_read_by_admin BOOLEAN NOT NULL DEFAULT FALSE;
 
 CREATE INDEX IF NOT EXISTS idx_projects_client_user_id ON projects(client_user_id);
 CREATE INDEX IF NOT EXISTS idx_documents_project_id ON documents(project_id);

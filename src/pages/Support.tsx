@@ -11,19 +11,21 @@ import {
   IonCardHeader,
   IonCardTitle,
   IonCardContent,
+  IonList,
   IonItem,
   IonLabel,
-  IonSelect,
-  IonSelectOption,
   IonTextarea,
   IonButton,
   useIonToast,
   IonChip,
   IonSpinner,
+  IonIcon,
+  IonBadge,
 } from '@ionic/react';
+import { chevronBackOutline, trashOutline } from 'ionicons/icons';
 import '../styles/styles.css';
 import { useAuth } from '../context/AuthContext';
-import { supportApi, usersApi } from '../api/services';
+import { supportApi } from '../api/services';
 import type { SupportMessage } from '../api/types';
 import { ROLE_LABELS } from '../models/Roles';
 import LogOut from '../components/LogOut';
@@ -37,14 +39,15 @@ const Support: React.FC = () => {
   const [sending, setSending] = useState(false);
   const [messageText, setMessageText] = useState('');
 
-  const [clients, setClients] = useState<Array<{ id: string; fio: string }>>([]);
   const [selectedClientId, setSelectedClientId] = useState('');
+  const [isMobile, setIsMobile] = useState(false);
+  const [mobileMode, setMobileMode] = useState<'list' | 'chat'>('list');
 
   const isClient = role === 'client';
 
-  const loadMessages = async (clientId?: string) => {
+  const loadMessages = async () => {
     try {
-      const data = await supportApi.list(clientId ? { clientUserId: clientId } : undefined);
+      const data = await supportApi.list();
       setMessages(data);
     } catch (error) {
       present({
@@ -59,65 +62,94 @@ const Support: React.FC = () => {
   };
 
   useEffect(() => {
-    if (isClient) {
-      loadMessages().catch(() => setLoading(false));
-      return;
-    }
-
-    const loadClients = async () => {
-      try {
-        const allUsers = await usersApi.list();
-        const onlyClients = allUsers
-          .filter((u) => u.role === 'client')
-          .map((u) => ({ id: u.id, fio: u.fio || u.email || 'Клиент' }));
-        setClients(onlyClients);
-        if (onlyClients.length) {
-          setSelectedClientId((prev) => prev || onlyClients[0].id);
-        } else {
-          setLoading(false);
-        }
-      } catch (error) {
-        present({
-          message: error instanceof Error ? error.message : 'Ошибка загрузки клиентов',
-          duration: 2200,
-          color: 'danger',
-          position: 'bottom',
-        });
-        setLoading(false);
-      }
-    };
-
-    loadClients().catch(() => setLoading(false));
+    setLoading(true);
+    loadMessages().catch(() => setLoading(false));
   }, [isClient]);
 
   useEffect(() => {
-    if (isClient) return;
-    if (!selectedClientId) return;
-    setLoading(true);
-    loadMessages(selectedClientId).catch(() => setLoading(false));
-  }, [selectedClientId, isClient]);
-
-  useEffect(() => {
-    if (isClient) {
-      const timer = window.setInterval(() => {
-        loadMessages().catch(() => {});
-      }, 10000);
-      return () => window.clearInterval(timer);
-    }
-
-    if (!selectedClientId) return;
     const timer = window.setInterval(() => {
-      loadMessages(selectedClientId).catch(() => {});
+      loadMessages().catch(() => {});
     }, 10000);
     return () => window.clearInterval(timer);
-  }, [isClient, selectedClientId]);
+  }, []);
+
+  useEffect(() => {
+    const update = () => setIsMobile(window.innerWidth <= 768);
+    update();
+    window.addEventListener('resize', update);
+    return () => window.removeEventListener('resize', update);
+  }, []);
 
   const sortedMessages = useMemo(
     () => [...messages].sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()),
     [messages]
   );
 
+  const chatList = useMemo(() => {
+    if (isClient) return [];
+    const map = new Map<string, {
+      clientUserId: string;
+      clientFio: string;
+      lastMessageAt: string;
+      lastMessageText: string;
+      unreadCount: number;
+    }>();
+    sortedMessages.forEach((msg) => {
+      const existing = map.get(msg.clientUserId);
+      const unreadIncrement = msg.senderRole === 'client' && !msg.isReadByAdmin ? 1 : 0;
+      if (!existing) {
+        map.set(msg.clientUserId, {
+          clientUserId: msg.clientUserId,
+          clientFio: msg.clientFio,
+          lastMessageAt: msg.createdAt,
+          lastMessageText: msg.messageText,
+          unreadCount: unreadIncrement,
+        });
+        return;
+      }
+
+      if (new Date(msg.createdAt).getTime() > new Date(existing.lastMessageAt).getTime()) {
+        existing.lastMessageAt = msg.createdAt;
+        existing.lastMessageText = msg.messageText;
+      }
+      existing.unreadCount += unreadIncrement;
+    });
+    return Array.from(map.values()).sort(
+      (a, b) => new Date(b.lastMessageAt).getTime() - new Date(a.lastMessageAt).getTime()
+    );
+  }, [sortedMessages, isClient]);
+
+  const selectedChat = useMemo(
+    () => chatList.find((chat) => chat.clientUserId === selectedClientId) || null,
+    [chatList, selectedClientId]
+  );
+
+  useEffect(() => {
+    if (isClient) return;
+    if (!chatList.length) {
+      setSelectedClientId('');
+      setMobileMode('list');
+      return;
+    }
+    if (!selectedClientId || !chatList.some((c) => c.clientUserId === selectedClientId)) {
+      setSelectedClientId(chatList[0].clientUserId);
+    }
+  }, [chatList, isClient, selectedClientId]);
+
+  useEffect(() => {
+    if (isClient || !selectedClientId) return;
+    markChatRead(selectedClientId).catch(() => {});
+  }, [selectedClientId, isClient]);
+
+  const visibleMessages = useMemo(() => {
+    if (isClient) return sortedMessages;
+    if (!selectedClientId) return [];
+    return sortedMessages.filter((m) => m.clientUserId === selectedClientId);
+  }, [isClient, selectedClientId, sortedMessages]);
+
   const canSend = messageText.trim().length > 0 && !sending && (isClient || Boolean(selectedClientId));
+  const showSidebar = !isClient && (!isMobile || mobileMode === 'list');
+  const showChat = isClient || !isMobile || mobileMode === 'chat';
 
   const handleSend = async () => {
     const text = messageText.trim();
@@ -130,7 +162,7 @@ const Support: React.FC = () => {
         clientUserId: isClient ? undefined : selectedClientId,
       });
       setMessageText('');
-      await loadMessages(isClient ? undefined : selectedClientId);
+      await loadMessages();
     } catch (error) {
       present({
         message: error instanceof Error ? error.message : 'Ошибка отправки сообщения',
@@ -140,6 +172,45 @@ const Support: React.FC = () => {
       });
     } finally {
       setSending(false);
+    }
+  };
+
+  const markChatRead = async (clientUserId: string) => {
+    if (isClient || !clientUserId) return;
+    try {
+      await supportApi.markRead(clientUserId);
+      setMessages((prev) =>
+        prev.map((msg) =>
+          msg.clientUserId === clientUserId && msg.senderRole === 'client' ? { ...msg, isReadByAdmin: true } : msg
+        )
+      );
+    } catch {
+      // silent, polling will sync state later
+    }
+  };
+
+  const selectChat = (clientUserId: string) => {
+    setSelectedClientId(clientUserId);
+    markChatRead(clientUserId).catch(() => {});
+    if (isMobile) setMobileMode('chat');
+  };
+
+  const handleDeleteChat = async () => {
+    if (isClient || !selectedClientId) return;
+    if (!window.confirm('Удалить весь чат с этим клиентом?')) return;
+    try {
+      await supportApi.removeChat(selectedClientId);
+      setMessages((prev) => prev.filter((msg) => msg.clientUserId !== selectedClientId));
+      setSelectedClientId('');
+      if (isMobile) setMobileMode('list');
+      present({ message: 'Чат удален', duration: 1800, color: 'success', position: 'bottom' });
+    } catch (error) {
+      present({
+        message: error instanceof Error ? error.message : 'Ошибка удаления чата',
+        duration: 2200,
+        color: 'danger',
+        position: 'bottom',
+      });
     }
   };
 
@@ -155,63 +226,101 @@ const Support: React.FC = () => {
         </IonToolbar>
       </IonHeader>
       <IonContent fullscreen className="ion-padding">
-        <IonCard>
+        <IonCard className="support-card">
           <IonCardHeader>
             <IonCardTitle>Поддержка</IonCardTitle>
           </IonCardHeader>
-          <IonCardContent>
-            {!isClient && (
-              <IonItem>
-                <IonLabel>Клиент</IonLabel>
-                <IonSelect value={selectedClientId} onIonChange={(e) => setSelectedClientId(String(e.detail.value || ''))}>
-                  {clients.map((client) => (
-                    <IonSelectOption key={client.id} value={client.id}>
-                      {client.fio}
-                    </IonSelectOption>
-                  ))}
-                </IonSelect>
-              </IonItem>
+          <IonCardContent className="support-layout">
+            {showSidebar && (
+              <div className="support-sidebar">
+                <div className="support-sidebar-title">Диалоги</div>
+                {loading ? (
+                  <div className="ion-text-center ion-padding">
+                    <IonSpinner name="crescent" />
+                  </div>
+                ) : chatList.length === 0 ? (
+                  <p className="support-empty">Пока нет обращений</p>
+                ) : (
+                  <IonList>
+                    {chatList.map((chat) => (
+                      <IonItem
+                        button
+                        detail={false}
+                        key={chat.clientUserId}
+                        className={`support-chat-item${chat.clientUserId === selectedClientId ? ' support-chat-item-active' : ''}`}
+                        onClick={() => selectChat(chat.clientUserId)}
+                      >
+                        <IonLabel>
+                          <h3>{chat.clientFio}</h3>
+                          <p>{chat.lastMessageText}</p>
+                        </IonLabel>
+                        {chat.unreadCount > 0 && (
+                          <IonBadge color="danger" slot="end">
+                            {chat.unreadCount}
+                          </IonBadge>
+                        )}
+                      </IonItem>
+                    ))}
+                  </IonList>
+                )}
+              </div>
             )}
 
-            <div className="support-chat-list ion-margin-top">
-              {loading ? (
-                <div className="ion-text-center ion-padding">
-                  <IonSpinner name="crescent" />
+            {showChat && (
+              <div className="support-main">
+                {!isClient && isMobile && (
+                  <IonButton fill="clear" size="small" className="support-mobile-back" onClick={() => setMobileMode('list')}>
+                    <IonIcon slot="start" icon={chevronBackOutline} />
+                    Диалоги
+                  </IonButton>
+                )}
+              {!isClient && selectedChat && (
+                <div className="support-chat-header">
+                  <div className="support-chat-header-title">{selectedChat.clientFio}</div>
+                  <IonButton fill="clear" color="danger" size="small" onClick={handleDeleteChat}>
+                    <IonIcon slot="start" icon={trashOutline} />
+                    Удалить чат
+                  </IonButton>
                 </div>
-              ) : sortedMessages.length === 0 ? (
-                <p>Сообщений пока нет.</p>
-              ) : (
-                sortedMessages.map((msg) => {
-                  const own = msg.senderId === user?.id;
-                  return (
-                    <div key={msg.id} className={`support-message ${own ? 'support-message-own' : ''}`}>
-                      <div className="support-message-meta">
-                        <strong>{msg.senderFio}</strong>
-                        <IonChip color="medium">{ROLE_LABELS[msg.senderRole]}</IonChip>
-                        <span>{new Date(msg.createdAt).toLocaleString('ru-RU')}</span>
-                      </div>
-                      {!isClient && (
-                        <div className="support-message-client">Клиент: {msg.clientFio}</div>
-                      )}
-                      <div className="support-message-text">{msg.messageText}</div>
-                    </div>
-                  );
-                })
               )}
-            </div>
+              <div className="support-chat-list">
+                {loading ? (
+                  <div className="ion-text-center ion-padding">
+                    <IonSpinner name="crescent" />
+                  </div>
+                ) : visibleMessages.length === 0 ? (
+                  <p className="support-empty">{isClient ? 'Сообщений пока нет.' : 'Выберите диалог слева'}</p>
+                ) : (
+                  visibleMessages.map((msg) => {
+                    const own = msg.senderId === user?.id;
+                    return (
+                      <div key={msg.id} className={`support-message ${own ? 'support-message-own' : ''}`}>
+                        <div className="support-message-meta">
+                          <strong>{msg.senderFio}</strong>
+                          <IonChip color="medium">{ROLE_LABELS[msg.senderRole]}</IonChip>
+                          <span>{new Date(msg.createdAt).toLocaleString('ru-RU')}</span>
+                        </div>
+                        <div className="support-message-text">{msg.messageText}</div>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
 
-            <IonItem className="ion-margin-top">
-              <IonTextarea
-                label="Сообщение"
-                labelPlacement="floating"
-                autoGrow
-                value={messageText}
-                onIonInput={(e) => setMessageText(String(e.detail.value ?? ''))}
-              />
-            </IonItem>
-            <IonButton className="ion-margin-top" expand="block" disabled={!canSend} onClick={handleSend}>
-              {sending ? 'Отправка...' : 'Отправить'}
-            </IonButton>
+              <IonItem className="ion-margin-top">
+                <IonTextarea
+                  label="Сообщение"
+                  labelPlacement="floating"
+                  autoGrow
+                  value={messageText}
+                  onIonInput={(e) => setMessageText(String(e.detail.value ?? ''))}
+                />
+              </IonItem>
+              <IonButton className="ion-margin-top" expand="block" disabled={!canSend} onClick={handleSend}>
+                {sending ? 'Отправка...' : 'Отправить'}
+              </IonButton>
+              </div>
+            )}
           </IonCardContent>
         </IonCard>
       </IonContent>

@@ -102,6 +102,7 @@ const toSupportMessage = (row) => ({
   id: row.id,
   clientUserId: row.client_user_id,
   messageText: row.message_text,
+  isReadByAdmin: Boolean(row.is_read_by_admin),
   createdAt: row.created_at,
   senderId: row.sender_user_id,
   senderFio: row.sender_fio,
@@ -600,13 +601,14 @@ app.post('/api/support/messages', authRequired, async (req, res) => {
     }
 
     const id = randomUUID();
+    const isReadByAdmin = req.user.role !== 'client';
     const { rows } = await pool.query(
       `
-      INSERT INTO support_messages (id, client_user_id, sender_user_id, message_text)
-      VALUES ($1, $2, $3, $4)
+      INSERT INTO support_messages (id, client_user_id, sender_user_id, message_text, is_read_by_admin)
+      VALUES ($1, $2, $3, $4, $5)
       RETURNING id
       `,
-      [id, clientUserId, req.user.id, messageText]
+      [id, clientUserId, req.user.id, messageText, isReadByAdmin]
     );
 
     const { rows: messageRows } = await pool.query(
@@ -629,6 +631,36 @@ app.post('/api/support/messages', authRequired, async (req, res) => {
   } catch {
     res.status(500).json({ error: 'Ошибка отправки сообщения' });
   }
+});
+
+app.patch('/api/support/chats/:clientUserId/read', authRequired, async (req, res) => {
+  if (req.user.role === 'client') return res.status(403).json({ error: 'Недостаточно прав' });
+
+  const clientUserId = String(req.params.clientUserId || '').trim();
+  if (!clientUserId) return res.status(400).json({ error: 'Клиент не указан' });
+
+  await pool.query(
+    `
+    UPDATE support_messages
+    SET is_read_by_admin = TRUE
+    WHERE client_user_id = $1
+      AND sender_user_id <> $2
+      AND is_read_by_admin = FALSE
+    `,
+    [clientUserId, req.user.id]
+  );
+
+  res.json({ ok: true });
+});
+
+app.delete('/api/support/chats/:clientUserId', authRequired, async (req, res) => {
+  if (req.user.role === 'client') return res.status(403).json({ error: 'Недостаточно прав' });
+
+  const clientUserId = String(req.params.clientUserId || '').trim();
+  if (!clientUserId) return res.status(400).json({ error: 'Клиент не указан' });
+
+  await pool.query('DELETE FROM support_messages WHERE client_user_id = $1', [clientUserId]);
+  res.json({ ok: true });
 });
 
 app.post(
