@@ -1,0 +1,2 @@
+8864b78a532604093994df53579ebcf89875aa612a34fb866d2acdbc37ea66f3  release/martstroy-v1.0.1-release.apk
+362ad9d5cc3811ffa334e5c12b217089482a5c1ffb0a80d2dd2606b5e0489207  release/martstroy-v1.0.1-release.aab

@@ -1,4 +1,8 @@
-const API_BASE = import.meta.env.VITE_API_URL || '/api';
+import { Capacitor } from '@capacitor/core';
+
+const WEB_API_BASE = import.meta.env.VITE_API_URL || '/api';
+const NATIVE_API_BASE = import.meta.env.VITE_API_MOBILE_URL || 'https://martstroyizhevskcrm.ru/api';
+const API_BASE = Capacitor.isNativePlatform() ? NATIVE_API_BASE : WEB_API_BASE;
 
 export const TOKEN_KEY = 'crm_token';
 export const USER_KEY = 'crm_user';
