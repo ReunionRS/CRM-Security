@@ -3,6 +3,7 @@ import type { UserRole } from '../models/Roles';
 import { authApi } from '../api/services';
 import type { AppUser } from '../api/types';
 import { getToken, setToken, USER_KEY } from '../api/http';
+import type { ApiRequestError } from '../api/http';
 
 interface AuthContextValue {
   user: AppUser | null;
@@ -61,10 +62,22 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         const me = await authApi.me();
         setUser(me.user);
         persistUser(me.user);
-      } catch {
-        setToken(null);
-        persistUser(null);
-        setUser(null);
+      } catch (error) {
+        const apiError = error as ApiRequestError;
+        const status = apiError?.status;
+        const message = apiError?.message || '';
+        const unauthorized = status === 401 || status === 403 || /unauthorized|forbidden|401|403/i.test(message);
+
+        if (unauthorized) {
+          setToken(null);
+          persistUser(null);
+          setUser(null);
+        } else {
+          // Keep existing token/user on transient network failures in PWA.
+          if (!cachedUser) {
+            setUser(null);
+          }
+        }
       } finally {
         setLoading(false);
       }

@@ -110,6 +110,18 @@ const toSupportMessage = (row) => ({
   clientFio: row.client_fio,
 });
 
+const toStageCommentNotification = (row) => ({
+  id: row.id,
+  clientUserId: row.client_user_id,
+  projectId: row.project_id,
+  projectAddress: row.project_address || '',
+  stageId: row.stage_id,
+  stageName: row.stage_name,
+  commentText: row.comment_text,
+  isRead: Boolean(row.is_read),
+  createdAt: row.created_at,
+});
+
 const signToken = (user) =>
   jwt.sign({ id: user.id, email: user.email, role: user.role }, JWT_SECRET, { expiresIn: '7d' });
 
@@ -306,12 +318,14 @@ app.patch('/api/projects/:id', authRequired, async (req, res) => {
   if (req.user.role === 'client') return res.status(403).json({ error: 'Недостаточно прав для редактирования' });
 
   const patch = req.body || {};
+  const currentStages = Array.isArray(current.stages) ? current.stages : [];
   const merged = {
     ...current,
     ...patch,
     clientUserId: patch.clientUserId ?? current.clientUserId,
     updatedAt: new Date().toISOString(),
   };
+  const mergedStages = Array.isArray(merged.stages) ? merged.stages : [];
 
   const { rows } = await pool.query(
     `UPDATE projects SET
@@ -357,12 +371,40 @@ app.patch('/api/projects/:id', authRequired, async (req, res) => {
       merged.plannedEndDate || null,
       merged.actualEndDate || null,
       merged.cameraUrl || null,
-      JSON.stringify(Array.isArray(merged.stages) ? merged.stages : []),
+      JSON.stringify(mergedStages),
       merged.updatedAt,
     ]
   );
 
-  res.json(toProject(rows[0]));
+  const updatedProject = toProject(rows[0]);
+
+  // Create client notifications on stage comment updates.
+  if (updatedProject.clientUserId) {
+    for (let i = 0; i < mergedStages.length; i += 1) {
+      const prevStage = currentStages[i] || {};
+      const nextStage = mergedStages[i] || {};
+      const prevComment = String(prevStage.stageComment || '').trim();
+      const nextComment = String(nextStage.stageComment || '').trim();
+      if (!nextComment || prevComment === nextComment) continue;
+
+      await pool.query(
+        `INSERT INTO stage_comment_notifications (
+          id, client_user_id, project_id, stage_id, stage_name, comment_text, is_read
+        ) VALUES ($1,$2,$3,$4,$5,$6,$7)`,
+        [
+          randomUUID(),
+          updatedProject.clientUserId,
+          updatedProject.id,
+          String(nextStage.id || `stage-${i}`),
+          String(nextStage.name || `Этап ${i + 1}`),
+          nextComment,
+          false,
+        ]
+      );
+    }
+  }
+
+  res.json(updatedProject);
 });
 
 app.delete('/api/projects/:id', authRequired, roleRequired('admin', 'director', 'manager'), async (req, res) => {
@@ -661,6 +703,118 @@ app.delete('/api/support/chats/:clientUserId', authRequired, async (req, res) =>
 
   await pool.query('DELETE FROM support_messages WHERE client_user_id = $1', [clientUserId]);
   res.json({ ok: true });
+});
+
+app.get('/api/notifications', authRequired, async (req, res) => {
+  try {
+    const isClient = req.user.role === 'client';
+    const clientUserId = req.query.clientUserId ? String(req.query.clientUserId) : null;
+
+    const params = [req.user.id];
+    const where = [];
+    where.push('h.notification_id IS NULL');
+
+    if (isClient) {
+      where.push('n.client_user_id = $1');
+    } else if (clientUserId) {
+      params.push(clientUserId);
+      where.push(`n.client_user_id = $${params.length}`);
+    }
+
+    const whereSql = where.length ? `WHERE ${where.join(' AND ')}` : '';
+    const { rows } = await pool.query(
+      `
+      SELECT
+        n.*,
+        p.construction_address AS project_address
+      FROM stage_comment_notifications n
+      LEFT JOIN projects p ON p.id = n.project_id
+      LEFT JOIN stage_comment_notification_hidden h
+        ON h.notification_id = n.id
+       AND h.user_id = $1
+      ${whereSql}
+      ORDER BY n.created_at DESC
+      `,
+      params
+    );
+
+    res.json(rows.map(toStageCommentNotification));
+  } catch {
+    res.status(500).json({ error: 'Ошибка загрузки уведомлений' });
+  }
+});
+
+app.patch('/api/notifications/:id/read', authRequired, async (req, res) => {
+  const id = String(req.params.id || '').trim();
+  if (!id) return res.status(400).json({ error: 'ID уведомления обязателен' });
+
+  const { rows } = await pool.query('SELECT * FROM stage_comment_notifications WHERE id = $1 LIMIT 1', [id]);
+  if (!rows.length) return res.status(404).json({ error: 'Уведомление не найдено' });
+
+  const rec = rows[0];
+  if (req.user.role === 'client' && rec.client_user_id !== req.user.id) {
+    return res.status(403).json({ error: 'Forbidden' });
+  }
+
+  await pool.query('UPDATE stage_comment_notifications SET is_read = TRUE WHERE id = $1', [id]);
+  res.json({ ok: true });
+});
+
+app.patch('/api/notifications/read-all', authRequired, async (req, res) => {
+  if (req.user.role === 'client') {
+    await pool.query('UPDATE stage_comment_notifications SET is_read = TRUE WHERE client_user_id = $1', [req.user.id]);
+    return res.json({ ok: true });
+  }
+
+  const clientUserId = String(req.body.clientUserId || '').trim();
+  if (!clientUserId) return res.status(400).json({ error: 'clientUserId обязателен' });
+  await pool.query('UPDATE stage_comment_notifications SET is_read = TRUE WHERE client_user_id = $1', [clientUserId]);
+  return res.json({ ok: true });
+});
+
+app.delete('/api/notifications/clear-all', authRequired, async (req, res) => {
+  const viewerUserId = req.user.id;
+  const isClient = req.user.role === 'client';
+  const clientUserId = String(req.body?.clientUserId || '').trim() || null;
+
+  if (isClient) {
+    await pool.query(
+      `
+      INSERT INTO stage_comment_notification_hidden (notification_id, user_id)
+      SELECT id, $1
+      FROM stage_comment_notifications
+      WHERE client_user_id = $1
+      ON CONFLICT (notification_id, user_id) DO NOTHING
+      `,
+      [viewerUserId]
+    );
+    return res.json({ ok: true });
+  }
+
+  if (clientUserId) {
+    await pool.query(
+      `
+      INSERT INTO stage_comment_notification_hidden (notification_id, user_id)
+      SELECT id, $1
+      FROM stage_comment_notifications
+      WHERE client_user_id = $2
+      ON CONFLICT (notification_id, user_id) DO NOTHING
+      `,
+      [viewerUserId, clientUserId]
+    );
+    return res.json({ ok: true });
+  }
+
+  await pool.query(
+    `
+    INSERT INTO stage_comment_notification_hidden (notification_id, user_id)
+    SELECT id, $1
+    FROM stage_comment_notifications
+    ON CONFLICT (notification_id, user_id) DO NOTHING
+    `,
+    [viewerUserId]
+  );
+  return res.json({ ok: true });
 });
 
 app.post(

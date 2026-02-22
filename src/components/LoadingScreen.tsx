@@ -7,14 +7,7 @@ const LoadingScreen: React.FC = () => (
   <div className="loading-screen">
     <div className="loading-content">
       <div className="loading-logo">
-        <img
-          className="loading-logo-img"
-          src="/png/logo.png"
-          alt="Март Строй"
-          onError={(e) => {
-            (e.currentTarget as HTMLImageElement).src = logoFallback;
-          }}
-        />
+        <img className="loading-logo-img" src={logoFallback} alt="Март Строй" />
       </div>
       <h1 className="loading-title">Март Строй</h1>
       <p className="loading-subtitle">Каркасные дома</p>

@@ -56,14 +56,37 @@ CREATE TABLE IF NOT EXISTS support_messages (
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+CREATE TABLE IF NOT EXISTS stage_comment_notifications (
+  id TEXT PRIMARY KEY,
+  client_user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+  stage_id TEXT NOT NULL,
+  stage_name TEXT NOT NULL,
+  comment_text TEXT NOT NULL,
+  is_read BOOLEAN NOT NULL DEFAULT FALSE,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS stage_comment_notification_hidden (
+  notification_id TEXT NOT NULL REFERENCES stage_comment_notifications(id) ON DELETE CASCADE,
+  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  PRIMARY KEY (notification_id, user_id)
+);
+
 ALTER TABLE documents ADD COLUMN IF NOT EXISTS mime_type TEXT;
 ALTER TABLE documents ADD COLUMN IF NOT EXISTS size_bytes BIGINT;
 ALTER TABLE documents ADD COLUMN IF NOT EXISTS version INTEGER NOT NULL DEFAULT 1;
 ALTER TABLE documents ADD COLUMN IF NOT EXISTS client_user_id TEXT REFERENCES users(id) ON DELETE SET NULL;
 ALTER TABLE projects ADD COLUMN IF NOT EXISTS client_phone TEXT;
 ALTER TABLE support_messages ADD COLUMN IF NOT EXISTS is_read_by_admin BOOLEAN NOT NULL DEFAULT FALSE;
+ALTER TABLE stage_comment_notifications ADD COLUMN IF NOT EXISTS is_read BOOLEAN NOT NULL DEFAULT FALSE;
 
 CREATE INDEX IF NOT EXISTS idx_projects_client_user_id ON projects(client_user_id);
 CREATE INDEX IF NOT EXISTS idx_documents_project_id ON documents(project_id);
 CREATE INDEX IF NOT EXISTS idx_support_messages_client_user_id ON support_messages(client_user_id);
 CREATE INDEX IF NOT EXISTS idx_support_messages_created_at ON support_messages(created_at);
+CREATE INDEX IF NOT EXISTS idx_stage_comment_notifications_client_user_id ON stage_comment_notifications(client_user_id);
+CREATE INDEX IF NOT EXISTS idx_stage_comment_notifications_project_id ON stage_comment_notifications(project_id);
+CREATE INDEX IF NOT EXISTS idx_stage_comment_notifications_created_at ON stage_comment_notifications(created_at);
+CREATE INDEX IF NOT EXISTS idx_stage_comment_notification_hidden_user_id ON stage_comment_notification_hidden(user_id);

@@ -64,9 +64,10 @@ const Login: React.FC = () => {
             Март Строй
           </IonTitle>
         </IonCardHeader>
-        <IonList>
-          <IonItem>
+        <IonList className="auth-list">
+          <IonItem className="auth-field">
             <IonInput
+              className="auth-input"
               type="email"
               label="Почта"
               labelPlacement="floating"
@@ -75,8 +76,9 @@ const Login: React.FC = () => {
               required
             />
           </IonItem>
-          <IonItem>
+          <IonItem className="auth-field">
             <IonInput
+              className="auth-input"
               label="Пароль"
               labelPlacement="floating"
               type="password"

@@ -90,6 +90,7 @@ export interface ProjectStage {
   responsible?: string;
   photoUrls?: string[];
   comments?: string;
+  stageComment?: string;
   status: StageStatus;
 }
 
@@ -100,6 +101,7 @@ export function getDefaultConstructionStages(): ProjectStage[] {
     plannedStart: '',
     plannedEnd: '',
     comments: STAGE_DESCRIPTION_ITEMS[name].join('\n'),
+    stageComment: '',
     status: 'not_started',
   }));
 }

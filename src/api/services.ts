@@ -1,5 +1,5 @@
 import { apiRequest, downloadUrl } from './http';
-import type { AppUser, AuthPayload, DocumentRecord, ProjectPayload, SupportMessage } from './types';
+import type { AppUser, AuthPayload, DocumentRecord, ProjectPayload, StageCommentNotification, SupportMessage } from './types';
 import type { UserRole } from '../models/Roles';
 import type { Project } from '../models/Project';
 
@@ -81,6 +81,10 @@ export const documentsApi = {
       method: 'DELETE',
     }),
   download: (id: string) => downloadUrl(`/documents/${id}/download`),
+  getBlob: (id: string) =>
+    apiRequest<Blob>(`/documents/${id}/download`, {
+      method: 'GET',
+    }),
 };
 
 export const supportApi = {
@@ -102,5 +106,28 @@ export const supportApi = {
   removeChat: (clientUserId: string) =>
     apiRequest<{ ok: boolean }>(`/support/chats/${clientUserId}`, {
       method: 'DELETE',
+    }),
+};
+
+export const notificationsApi = {
+  list: (filter?: { clientUserId?: string }) => {
+    const params = new URLSearchParams();
+    if (filter?.clientUserId) params.set('clientUserId', filter.clientUserId);
+    const query = params.toString();
+    return apiRequest<StageCommentNotification[]>(`/notifications${query ? `?${query}` : ''}`);
+  },
+  markRead: (id: string) =>
+    apiRequest<{ ok: boolean }>(`/notifications/${id}/read`, {
+      method: 'PATCH',
+    }),
+  markAllRead: (clientUserId?: string) =>
+    apiRequest<{ ok: boolean }>('/notifications/read-all', {
+      method: 'PATCH',
+      body: JSON.stringify(clientUserId ? { clientUserId } : {}),
+    }),
+  clearAll: (clientUserId?: string) =>
+    apiRequest<{ ok: boolean }>('/notifications/clear-all', {
+      method: 'DELETE',
+      body: JSON.stringify(clientUserId ? { clientUserId } : {}),
     }),
 };

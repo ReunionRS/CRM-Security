@@ -3,6 +3,11 @@ const API_BASE = import.meta.env.VITE_API_URL || '/api';
 export const TOKEN_KEY = 'crm_token';
 export const USER_KEY = 'crm_user';
 
+export interface ApiRequestError extends Error {
+  status?: number;
+  isNetworkError?: boolean;
+}
+
 export function getToken(): string | null {
   return localStorage.getItem(TOKEN_KEY);
 }
@@ -36,10 +41,17 @@ export async function apiRequest<T>(
     headers.set('Content-Type', 'application/json');
   }
 
-  const res = await fetch(`${API_BASE}${path}`, {
-    ...init,
-    headers,
-  });
+  let res: Response;
+  try {
+    res = await fetch(`${API_BASE}${path}`, {
+      ...init,
+      headers,
+    });
+  } catch (error) {
+    const networkError = new Error(error instanceof Error ? error.message : 'Network error') as ApiRequestError;
+    networkError.isNetworkError = true;
+    throw networkError;
+  }
 
   if (!res.ok) {
     let message = `Request failed: ${res.status}`;
@@ -49,7 +61,9 @@ export async function apiRequest<T>(
     } catch {
       // keep default message
     }
-    throw new Error(message);
+    const requestError = new Error(message) as ApiRequestError;
+    requestError.status = res.status;
+    throw requestError;
   }
 
   if (res.status === 204) {

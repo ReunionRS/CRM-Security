@@ -41,4 +41,16 @@ export interface SupportMessage {
   clientFio: string;
 }
 
+export interface StageCommentNotification {
+  id: string;
+  clientUserId: string;
+  projectId: string;
+  projectAddress: string;
+  stageId: string;
+  stageName: string;
+  commentText: string;
+  isRead: boolean;
+  createdAt: string;
+}
+
 export type ProjectPayload = Project;

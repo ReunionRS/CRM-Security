@@ -39,6 +39,13 @@ const STATUS_LABELS: Record<string, string> = {
   cancelled: 'Отменён',
 };
 
+const formatDateRu = (value?: string) => {
+  if (!value) return '—';
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return value;
+  return parsed.toLocaleDateString('ru-RU');
+};
+
 const ProjectList: React.FC = () => {
   const [projects, setProjects] = useState<Project[]>([]);
   const [users, setUsers] = useState<UserRecord[]>([]);
@@ -49,6 +56,17 @@ const ProjectList: React.FC = () => {
   const [editEmail, setEditEmail] = useState<string>('');
   const [editAddress, setEditAddress] = useState<string>('');
   const [editStatus, setEditStatus] = useState<string>('');
+  const [editProjectType, setEditProjectType] = useState<'typical' | 'individual'>('typical');
+  const [editAreaSqm, setEditAreaSqm] = useState<number>(0);
+  const [editEstimatedCost, setEditEstimatedCost] = useState<number>(0);
+  const [editStartDate, setEditStartDate] = useState<string>('');
+  const [editPlannedEndDate, setEditPlannedEndDate] = useState<string>('');
+  const [editActualEndDate, setEditActualEndDate] = useState<string>('');
+  const [editContractAmount, setEditContractAmount] = useState<number>(0);
+  const [editPaidAmount, setEditPaidAmount] = useState<number>(0);
+  const [editNextPaymentDate, setEditNextPaymentDate] = useState<string>('');
+  const [editLastPaymentDate, setEditLastPaymentDate] = useState<string>('');
+  const [editCameraUrl, setEditCameraUrl] = useState<string>('');
   const [present] = useIonToast();
   const history = useHistory();
   const { role, firestoreUserId } = useAuth();
@@ -104,6 +122,17 @@ const ProjectList: React.FC = () => {
     setEditEmail(project.clientEmail || '');
     setEditAddress(project.constructionAddress || '');
     setEditStatus(project.status || 'draft');
+    setEditProjectType(project.projectType || 'typical');
+    setEditAreaSqm(project.areaSqm ?? 0);
+    setEditEstimatedCost(project.estimatedCost ?? 0);
+    setEditStartDate(project.startDate || '');
+    setEditPlannedEndDate(project.plannedEndDate || '');
+    setEditActualEndDate(project.actualEndDate || '');
+    setEditContractAmount(project.contractAmount ?? 0);
+    setEditPaidAmount(project.paidAmount ?? 0);
+    setEditNextPaymentDate(project.nextPaymentDate || '');
+    setEditLastPaymentDate(project.lastPaymentDate || '');
+    setEditCameraUrl(project.cameraUrl || '');
   };
 
   const handleSaveEdit = async () => {
@@ -134,6 +163,17 @@ const ProjectList: React.FC = () => {
         clientEmail: editEmail,
         constructionAddress: editAddress,
         status: editStatus as Project['status'],
+        projectType: editProjectType,
+        areaSqm: Number.isFinite(editAreaSqm) ? editAreaSqm : 0,
+        estimatedCost: Number.isFinite(editEstimatedCost) ? editEstimatedCost : 0,
+        startDate: editStartDate || '',
+        plannedEndDate: editPlannedEndDate || '',
+        actualEndDate: editActualEndDate || '',
+        contractAmount: Number.isFinite(editContractAmount) ? editContractAmount : 0,
+        paidAmount: Number.isFinite(editPaidAmount) ? editPaidAmount : 0,
+        nextPaymentDate: editNextPaymentDate || '',
+        lastPaymentDate: editLastPaymentDate || '',
+        cameraUrl: editCameraUrl || '',
       });
 
       setEditingProject(null);
@@ -171,8 +211,8 @@ const ProjectList: React.FC = () => {
         <IonCard key={project.id} button onClick={() => history.push(`/projects/${project.id}`)} className="project-card">
           <IonCardHeader>
             <IonCardTitle>
-              <IonIcon icon={locationOutline} className="card-icon" />
-              {project.constructionAddress || 'Без адреса'}
+              <IonIcon icon={personOutline} className="card-icon" />
+              {project.clientFio || 'Клиент не указан'}
             </IonCardTitle>
             <IonChip color={project.status === 'completed' ? 'success' : 'primary'}>
               {STATUS_LABELS[project.status] || project.status}
@@ -185,8 +225,8 @@ const ProjectList: React.FC = () => {
           </IonCardHeader>
           <IonCardContent>
             <IonItem lines="none" className="project-meta">
-              <IonIcon icon={personOutline} slot="start" />
-              <IonLabel>{project.clientFio}</IonLabel>
+              <IonIcon icon={locationOutline} slot="start" />
+              <IonLabel>{project.constructionAddress || 'Без адреса'}</IonLabel>
             </IonItem>
             <div className="project-progress">
               <IonLabel>Готовность: {progressPercent(project)}%</IonLabel>
@@ -195,8 +235,8 @@ const ProjectList: React.FC = () => {
               </div>
             </div>
             <div className="project-dates">
-              <span>Начало: {project.startDate || '—'}</span>
-              <span>План сдачи: {project.plannedEndDate || '—'}</span>
+              <span>Начало: {formatDateRu(project.startDate)}</span>
+              <span>План сдачи: {formatDateRu(project.plannedEndDate)}</span>
             </div>
             <div style={{ display: 'flex', gap: '8px', marginTop: '12px' }}>
               {role !== 'client' && (
@@ -294,6 +334,123 @@ const ProjectList: React.FC = () => {
               <IonSelectOption value="on_hold">Приостановлен</IonSelectOption>
               <IonSelectOption value="cancelled">Отменён</IonSelectOption>
             </IonSelect>
+          </div>
+
+          <div className="edit-form-group">
+            <label className="edit-form-label">Тип объекта</label>
+            <IonSelect
+              value={editProjectType}
+              onIonChange={(e) => setEditProjectType((e.detail.value as 'typical' | 'individual') || 'typical')}
+            >
+              <IonSelectOption value="typical">Типовой</IonSelectOption>
+              <IonSelectOption value="individual">Индивидуальный</IonSelectOption>
+            </IonSelect>
+          </div>
+
+          <div className="edit-form-group">
+            <label className="edit-form-label">Площадь (м²)</label>
+            <IonInput
+              type="number"
+              value={editAreaSqm}
+              onIonChange={(e) => {
+                const value = String(e.detail.value || '');
+                setEditAreaSqm(value === '' ? 0 : Number(value));
+              }}
+              placeholder="0"
+            />
+          </div>
+
+          <div className="edit-form-group">
+            <label className="edit-form-label">Сметная стоимость (₽)</label>
+            <IonInput
+              type="number"
+              value={editEstimatedCost}
+              onIonChange={(e) => {
+                const value = String(e.detail.value || '');
+                setEditEstimatedCost(value === '' ? 0 : Number(value));
+              }}
+              placeholder="0"
+            />
+          </div>
+
+          <div className="edit-form-group">
+            <label className="edit-form-label">Дата начала</label>
+            <IonInput
+              type="date"
+              value={editStartDate}
+              onIonChange={(e) => setEditStartDate(String(e.detail.value || ''))}
+            />
+          </div>
+
+          <div className="edit-form-group">
+            <label className="edit-form-label">План сдачи</label>
+            <IonInput
+              type="date"
+              value={editPlannedEndDate}
+              onIonChange={(e) => setEditPlannedEndDate(String(e.detail.value || ''))}
+            />
+          </div>
+
+          <div className="edit-form-group">
+            <label className="edit-form-label">Фактическая дата сдачи</label>
+            <IonInput
+              type="date"
+              value={editActualEndDate}
+              onIonChange={(e) => setEditActualEndDate(String(e.detail.value || ''))}
+            />
+          </div>
+
+          <div className="edit-form-group">
+            <label className="edit-form-label">Сумма договора (₽)</label>
+            <IonInput
+              type="number"
+              value={editContractAmount}
+              onIonChange={(e) => {
+                const value = String(e.detail.value || '');
+                setEditContractAmount(value === '' ? 0 : Number(value));
+              }}
+              placeholder="0"
+            />
+          </div>
+
+          <div className="edit-form-group">
+            <label className="edit-form-label">Оплачено (₽)</label>
+            <IonInput
+              type="number"
+              value={editPaidAmount}
+              onIonChange={(e) => {
+                const value = String(e.detail.value || '');
+                setEditPaidAmount(value === '' ? 0 : Number(value));
+              }}
+              placeholder="0"
+            />
+          </div>
+
+          <div className="edit-form-group">
+            <label className="edit-form-label">Дата следующего платежа</label>
+            <IonInput
+              type="date"
+              value={editNextPaymentDate}
+              onIonChange={(e) => setEditNextPaymentDate(String(e.detail.value || ''))}
+            />
+          </div>
+
+          <div className="edit-form-group">
+            <label className="edit-form-label">Дата последнего платежа</label>
+            <IonInput
+              type="date"
+              value={editLastPaymentDate}
+              onIonChange={(e) => setEditLastPaymentDate(String(e.detail.value || ''))}
+            />
+          </div>
+
+          <div className="edit-form-group">
+            <label className="edit-form-label">Ссылка на камеру</label>
+            <IonInput
+              value={editCameraUrl}
+              onIonChange={(e) => setEditCameraUrl(String(e.detail.value || ''))}
+              placeholder="https://..."
+            />
           </div>
 
           <IonButton expand="block" onClick={handleSaveEdit}>

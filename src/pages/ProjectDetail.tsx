@@ -27,16 +27,19 @@ import {
   IonSelect,
   IonSelectOption,
   IonInput,
+  IonTextarea,
   IonButton,
   useIonToast,
   IonModal,
   IonIcon,
+  IonSpinner,
 } from '@ionic/react';
 import { chevronBackOutline, chevronForwardOutline, close } from 'ionicons/icons';
 import '../styles/styles.css';
 import { useAuth } from '../context/AuthContext';
-import { projectsApi, usersApi } from '../api/services';
+import { documentsApi, projectsApi, usersApi } from '../api/services';
 import { backendAssetUrl } from '../api/http';
+import type { DocumentRecord } from '../api/types';
 
 const STAGE_STATUS_LABELS: Record<StageStatus, string> = {
   not_started: 'Не начат',
@@ -100,6 +103,13 @@ const ProjectDetail: React.FC = () => {
   const [editClientPhone, setEditClientPhone] = useState('');
   const [editClientEmail, setEditClientEmail] = useState('');
   const [editStatus, setEditStatus] = useState<string>('draft');
+  const [editProjectType, setEditProjectType] = useState<'typical' | 'individual'>('typical');
+  const [editAreaSqm, setEditAreaSqm] = useState<number>(0);
+  const [editEstimatedCost, setEditEstimatedCost] = useState<number>(0);
+  const [editStartDate, setEditStartDate] = useState('');
+  const [editPlannedEndDate, setEditPlannedEndDate] = useState('');
+  const [editActualEndDate, setEditActualEndDate] = useState('');
+  const [editCameraUrl, setEditCameraUrl] = useState('');
   const [editClientUserId, setEditClientUserId] = useState('');
   const [uploadingStageIndex, setUploadingStageIndex] = useState<number | null>(null);
   const [clients, setClients] = useState<Array<{ id: string; fio: string; email?: string }>>([]);
@@ -113,6 +123,7 @@ const ProjectDetail: React.FC = () => {
   const [paidAmount, setPaidAmount] = useState<number>(0);
   const [nextPaymentDate, setNextPaymentDate] = useState('');
   const [lastPaymentDate, setLastPaymentDate] = useState('');
+  const [financeEditorOpen, setFinanceEditorOpen] = useState(false);
   const [galleryOpen, setGalleryOpen] = useState(false);
   const [galleryImages, setGalleryImages] = useState<string[]>([]);
   const [galleryIndex, setGalleryIndex] = useState(0);
@@ -121,6 +132,15 @@ const ProjectDetail: React.FC = () => {
   const [galleryPanY, setGalleryPanY] = useState(0);
   const [galleryDragging, setGalleryDragging] = useState(false);
   const [galleryMoved, setGalleryMoved] = useState(false);
+  const [stageCommentDrafts, setStageCommentDrafts] = useState<Record<string, string>>({});
+  const [projectPlanDoc, setProjectPlanDoc] = useState<DocumentRecord | null>(null);
+  const [documentPreviewOpen, setDocumentPreviewOpen] = useState(false);
+  const [documentPreviewLoading, setDocumentPreviewLoading] = useState(false);
+  const [documentPreviewDoc, setDocumentPreviewDoc] = useState<DocumentRecord | null>(null);
+  const [documentPreviewMode, setDocumentPreviewMode] = useState<'pdf' | 'docx' | 'unsupported' | null>(null);
+  const [documentPreviewUrl, setDocumentPreviewUrl] = useState('');
+  const [documentPreviewHtml, setDocumentPreviewHtml] = useState('');
+  const [documentPreviewError, setDocumentPreviewError] = useState('');
 
   useEffect(() => {
     if (!id) return;
@@ -137,7 +157,24 @@ const ProjectDetail: React.FC = () => {
       setEditClientPhone(data.clientPhone || data.clientContacts || '');
       setEditClientEmail(data.clientEmail || '');
       setEditStatus(data.status);
+      setEditProjectType(data.projectType || 'typical');
+      setEditAreaSqm(data.areaSqm ?? 0);
+      setEditEstimatedCost(data.estimatedCost ?? 0);
+      setEditStartDate(data.startDate || '');
+      setEditPlannedEndDate(data.plannedEndDate || '');
+      setEditActualEndDate(data.actualEndDate || '');
+      setEditCameraUrl(data.cameraUrl || '');
       setEditClientUserId(data.clientUserId || '');
+
+      const docs = await documentsApi.list({ projectId: id });
+      const byProjectType = docs.filter((d) => /проект строения/i.test(d.type || ''));
+
+      const projectDoc =
+        byProjectType.find((d) => (d.mimeType || '').includes('pdf') || d.name.toLowerCase().endsWith('.pdf')) ||
+        byProjectType.find((d) => d.name.toLowerCase().endsWith('.docx')) ||
+        byProjectType[0] ||
+        null;
+      setProjectPlanDoc(projectDoc);
     };
     load().catch((error) => {
       present({
@@ -148,6 +185,14 @@ const ProjectDetail: React.FC = () => {
       });
     });
   }, [id]);
+
+  useEffect(() => {
+    return () => {
+      if (documentPreviewUrl) {
+        URL.revokeObjectURL(documentPreviewUrl);
+      }
+    };
+  }, [documentPreviewUrl]);
 
   useEffect(() => {
     const loadClients = async () => {
@@ -184,6 +229,14 @@ const ProjectDetail: React.FC = () => {
     });
   }, [location.search, stages]);
 
+  useEffect(() => {
+    const nextDrafts: Record<string, string> = {};
+    stages.forEach((stage) => {
+      nextDrafts[stage.id] = stage.stageComment || '';
+    });
+    setStageCommentDrafts(nextDrafts);
+  }, [stages]);
+
   const persistProjectPatch = async (patch: Partial<Project>) => {
     if (!id) return;
     const updated = await projectsApi.update(id, patch);
@@ -191,16 +244,17 @@ const ProjectDetail: React.FC = () => {
     setStages(ensureStages(updated));
   };
 
-  const updateStage = async (index: number, patch: Partial<ProjectStage>) => {
+  const updateStage = async (index: number, patch: Partial<ProjectStage>): Promise<boolean> => {
     if (role === 'client') {
       present({ message: 'У вас нет прав для изменения статуса этапов', duration: 2000, position: 'bottom', color: 'warning' });
-      return;
+      return false;
     }
 
     const next = stages.map((s, i) => (i === index ? { ...s, ...patch } : s));
     setStages(next);
     try {
       await persistProjectPatch({ stages: next, updatedAt: new Date().toISOString() });
+      return true;
     } catch (error) {
       present({
         message: error instanceof Error ? error.message : 'Ошибка обновления этапа',
@@ -208,6 +262,7 @@ const ProjectDetail: React.FC = () => {
         position: 'bottom',
         color: 'danger',
       });
+      return false;
     }
   };
 
@@ -280,6 +335,13 @@ const ProjectDetail: React.FC = () => {
         clientEmail,
         clientUserId: finalClientUserId || undefined,
         status: editStatus as Project['status'],
+        projectType: editProjectType,
+        areaSqm: Number.isFinite(editAreaSqm) ? editAreaSqm : 0,
+        estimatedCost: Number.isFinite(editEstimatedCost) ? editEstimatedCost : 0,
+        startDate: editStartDate || '',
+        plannedEndDate: editPlannedEndDate || '',
+        actualEndDate: editActualEndDate || '',
+        cameraUrl: editCameraUrl || '',
         updatedAt: new Date().toISOString(),
       });
       setEditModalOpen(false);
@@ -464,6 +526,62 @@ const ProjectDetail: React.FC = () => {
     }
   };
 
+  const handleSaveStageComment = async (index: number) => {
+    const stage = stages[index];
+    if (!stage) return;
+    const comment = (stageCommentDrafts[stage.id] || '').trim();
+    const ok = await updateStage(index, { stageComment: comment });
+    if (ok) {
+      present({ message: 'Комментарий этапа сохранён', duration: 1800, position: 'bottom', color: 'success' });
+    }
+  };
+
+  const handleOpenDocumentPreview = async (doc: DocumentRecord) => {
+    setDocumentPreviewDoc(doc);
+    setDocumentPreviewError('');
+    setDocumentPreviewHtml('');
+    setDocumentPreviewMode(null);
+
+    if (documentPreviewUrl) {
+      URL.revokeObjectURL(documentPreviewUrl);
+      setDocumentPreviewUrl('');
+    }
+
+    setDocumentPreviewLoading(true);
+    setDocumentPreviewOpen(true);
+    try {
+      const blob = await documentsApi.getBlob(doc.id);
+      const mime = (doc.mimeType || '').toLowerCase();
+      const ext = doc.name.toLowerCase().split('.').pop() || '';
+
+      if (mime.includes('pdf') || ext === 'pdf') {
+        const url = URL.createObjectURL(blob);
+        setDocumentPreviewUrl(url);
+        setDocumentPreviewMode('pdf');
+      } else if (ext === 'docx') {
+        const mammoth = await import('mammoth/mammoth.browser');
+        const buffer = await blob.arrayBuffer();
+        const result = await mammoth.convertToHtml({ arrayBuffer: buffer });
+        setDocumentPreviewHtml(result.value || '<p>Документ пуст.</p>');
+        setDocumentPreviewMode('docx');
+      } else {
+        setDocumentPreviewMode('unsupported');
+        setDocumentPreviewError('Для этого формата встроенный просмотр недоступен. Нажмите "Скачать файл".');
+      }
+    } catch (error) {
+      setDocumentPreviewMode('unsupported');
+      setDocumentPreviewError(error instanceof Error ? error.message : 'Не удалось открыть документ');
+      present({
+        message: error instanceof Error ? error.message : 'Не удалось открыть документ',
+        duration: 2200,
+        position: 'bottom',
+        color: 'danger',
+      });
+    } finally {
+      setDocumentPreviewLoading(false);
+    }
+  };
+
   if (!project) {
     return (
       <IonPage>
@@ -507,6 +625,24 @@ const ProjectDetail: React.FC = () => {
             <p><strong>Адрес:</strong> {project.constructionAddress}</p>
             <p><strong>Тип:</strong> {project.projectType === 'typical' ? 'Типовой' : 'Индивидуальный'}</p>
             <p><strong>Площадь:</strong> {project.areaSqm} м²</p>
+            <div className="project-pdf-block">
+              <div className="project-pdf-title">Проект строения</div>
+              {projectPlanDoc ? (
+                <>
+                  <div className="project-pdf-file">{projectPlanDoc.name}</div>
+                  <IonButton
+                    fill="outline"
+                    size="small"
+                    onClick={() => handleOpenDocumentPreview(projectPlanDoc)}
+                    disabled={documentPreviewLoading}
+                  >
+                    {documentPreviewLoading ? 'Открываем...' : 'Открыть документ'}
+                  </IonButton>
+                </>
+              ) : (
+                <div className="project-pdf-empty">Файл проекта пока не загружен</div>
+              )}
+            </div>
             <p><strong>Сметная стоимость:</strong> {project.estimatedCost?.toLocaleString('ru-RU')} ₽</p>
             <p><strong>Дата начала:</strong> {project.startDate || '—'}</p>
             <p><strong>План сдачи:</strong> {project.plannedEndDate || '—'}</p>
@@ -555,8 +691,8 @@ const ProjectDetail: React.FC = () => {
               <strong>Оплачено:</strong> {(project.paidAmount ?? paidAmount)?.toLocaleString('ru-RU') || '0'} ₽ ({paidPercent}%)
             </p>
             <p><strong>Задолженность:</strong> {debt.toLocaleString('ru-RU')} ₽</p>
-            <p><strong>Дата последнего платежа:</strong> {formatDateRu(project.lastPaymentDate ?? lastPaymentDate)}</p>
             <p><strong>Дата следующего платежа:</strong> {formatDateRu(project.nextPaymentDate ?? nextPaymentDate)}</p>
+            <p><strong>Дата последнего платежа:</strong> {formatDateRu(project.lastPaymentDate ?? lastPaymentDate)}</p>
 
             <div className="ion-margin-vertical">
               {debt === 0 ? (
@@ -570,45 +706,57 @@ const ProjectDetail: React.FC = () => {
 
             {canEditFinance && (
               <>
-                <IonItem>
-                  <IonInput
-                    label="Сумма договора (₽)"
-                    labelPlacement="floating"
-                    type="number"
-                    value={contractAmount}
-                    onIonInput={(e) => setContractAmount(Number(e.detail.value ?? 0))}
-                  />
-                </IonItem>
-                <IonItem>
-                  <IonInput
-                    label="Оплачено (₽)"
-                    labelPlacement="floating"
-                    type="number"
-                    value={paidAmount}
-                    onIonInput={(e) => setPaidAmount(Number(e.detail.value ?? 0))}
-                  />
-                </IonItem>
-                <IonItem>
-                  <IonInput
-                    label="Дата последнего платежа"
-                    labelPlacement="floating"
-                    type="date"
-                    value={lastPaymentDate}
-                    onIonInput={(e) => setLastPaymentDate(String(e.detail.value ?? ''))}
-                  />
-                </IonItem>
-                <IonItem>
-                  <IonInput
-                    label="Дата следующего платежа"
-                    labelPlacement="floating"
-                    type="date"
-                    value={nextPaymentDate}
-                    onIonInput={(e) => setNextPaymentDate(String(e.detail.value ?? ''))}
-                  />
-                </IonItem>
-                <IonButton className="ion-margin-top" expand="block" onClick={handleSaveFinance}>
-                  Сохранить финансы
+                <IonButton
+                  className="ion-margin-top"
+                  fill="outline"
+                  expand="block"
+                  onClick={() => setFinanceEditorOpen((prev) => !prev)}
+                >
+                  {financeEditorOpen ? 'Скрыть редактирование' : 'Редактировать финансы'}
                 </IonButton>
+                {financeEditorOpen && (
+                  <>
+                    <IonItem>
+                      <IonInput
+                        label="Сумма договора (₽)"
+                        labelPlacement="floating"
+                        type="number"
+                        value={contractAmount}
+                        onIonInput={(e) => setContractAmount(Number(e.detail.value ?? 0))}
+                      />
+                    </IonItem>
+                    <IonItem>
+                      <IonInput
+                        label="Оплачено (₽)"
+                        labelPlacement="floating"
+                        type="number"
+                        value={paidAmount}
+                        onIonInput={(e) => setPaidAmount(Number(e.detail.value ?? 0))}
+                      />
+                    </IonItem>
+                    <IonItem>
+                      <IonInput
+                        label="Дата следующего платежа"
+                        labelPlacement="floating"
+                        type="date"
+                        value={nextPaymentDate}
+                        onIonInput={(e) => setNextPaymentDate(String(e.detail.value ?? ''))}
+                      />
+                    </IonItem>
+                    <IonItem>
+                      <IonInput
+                        label="Дата последнего платежа"
+                        labelPlacement="floating"
+                        type="date"
+                        value={lastPaymentDate}
+                        onIonInput={(e) => setLastPaymentDate(String(e.detail.value ?? ''))}
+                      />
+                    </IonItem>
+                    <IonButton className="ion-margin-top" expand="block" onClick={handleSaveFinance}>
+                      Сохранить финансы
+                    </IonButton>
+                  </>
+                )}
               </>
             )}
           </IonCardContent>
@@ -630,8 +778,8 @@ const ProjectDetail: React.FC = () => {
                     id={toStageAnchorId(index)}
                     className={`${isOverdue ? 'stage-overdue ' : ''}stage-item${isFocused ? ' stage-item-focused' : ''}`}
                   >
-                    <IonItem>
-                      <IonLabel>
+                    <div className="stage-item-head">
+                      <div className="stage-item-info">
                         <h2>{stage.name}</h2>
                         <p>
                           План: {formatDateRu(stage.plannedStart)} – {formatDateRu(stage.plannedEnd)}
@@ -639,9 +787,9 @@ const ProjectDetail: React.FC = () => {
                           {stage.actualEnd && ` • Факт ок.: ${formatDateRu(stage.actualEnd)}`}
                         </p>
                         {stage.responsible && <p>Ответственный: {stage.responsible}</p>}
-                        <details style={{ marginTop: '8px' }}>
-                          <summary style={{ cursor: 'pointer', color: 'var(--ion-color-primary)' }}>Описание</summary>
-                          <ul style={{ margin: '8px 0 0 16px', padding: 0 }}>
+                        <details className="stage-description-details">
+                          <summary className="stage-description-summary">Описание</summary>
+                          <ul className="stage-description-list">
                             {(stage.comments || '')
                               .split('\n')
                               .map((line) => line.trim())
@@ -651,39 +799,37 @@ const ProjectDetail: React.FC = () => {
                               ))}
                           </ul>
                         </details>
-                      </IonLabel>
+                      </div>
                       {role !== 'client' && (
-                        <>
+                        <div className="stage-item-actions">
                           <IonButton fill="clear" size="small" onClick={() => openEditStageModal(index)}>
                             Даты
                           </IonButton>
                           <IonSelect
                             value={stage.status}
                             onIonChange={(e) => updateStage(index, { status: e.detail.value as StageStatus })}
-                            interface="action-sheet"
+                            interface={typeof window !== 'undefined' && window.innerWidth > 768 ? 'popover' : 'action-sheet'}
                             placeholder="Статус"
                           >
                             <IonSelectOption value="not_started">Не начат</IonSelectOption>
                             <IonSelectOption value="in_progress">В работе</IonSelectOption>
                             <IonSelectOption value="completed">Завершён</IonSelectOption>
                           </IonSelect>
-                        </>
+                        </div>
                       )}
                       {role === 'client' && (
-                        <IonChip color="primary" slot="end">
-                          {STAGE_STATUS_LABELS[stage.status]}
-                        </IonChip>
+                        <div className="stage-client-status">
+                          <IonChip color="primary">{STAGE_STATUS_LABELS[stage.status]}</IonChip>
+                        </div>
                       )}
-                    </IonItem>
-                    <div style={{ padding: '12px 16px' }}>
-                      <div style={{ marginBottom: '10px' }}>
+                    </div>
+                    <div className="stage-body">
+                      <div className="stage-photos-section">
+                        <div className="stage-photos-header">Фото этапа</div>
                         {role !== 'client' && (
-                          <>
-                            <label
-                              htmlFor={`file-input-${index}`}
-                              style={{ display: 'block', marginBottom: '8px', fontSize: '0.9rem', color: 'var(--ion-color-primary)' }}
-                            >
-                              Загрузить фото этапа:
+                          <div className="stage-upload-block">
+                            <label htmlFor={`file-input-${index}`} className="stage-upload-label">
+                              Добавить фото:
                             </label>
                             <input
                               id={`file-input-${index}`}
@@ -696,65 +842,72 @@ const ProjectDetail: React.FC = () => {
                                 if (files.length) handleStageImageUpload(index, files);
                               }}
                               disabled={uploadingStageIndex === index}
-                              style={{ fontSize: '0.85rem' }}
                             />
-                          </>
+                          </div>
+                        )}
+
+                        {stage.photoUrls && stage.photoUrls.length > 0 && (
+                          <div className="stage-photos-grid-wrap">
+                            <p className="stage-photos-meta">Фото ({stage.photoUrls.length}):</p>
+                            <div className="stage-photos-grid">
+                              {stage.photoUrls.map((photoUrl, idx) => (
+                                <div key={idx} className="stage-photo-tile">
+                                  <img
+                                    src={backendAssetUrl(photoUrl)}
+                                    alt={`Stage ${index + 1} photo ${idx + 1}`}
+                                    className="stage-photo-image"
+                                    onClick={() => openGallery(stage.photoUrls || [], idx)}
+                                  />
+                                  {role !== 'client' && (
+                                    <button
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        handleRemovePhoto(index, photoUrl);
+                                      }}
+                                      className="stage-photo-delete"
+                                    >
+                                      x
+                                    </button>
+                                  )}
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        {(!stage.photoUrls || stage.photoUrls.length === 0) && (
+                          <p className="stage-photos-empty">Фото пока не добавлено</p>
                         )}
                       </div>
-                      {stage.photoUrls && stage.photoUrls.length > 0 && (
-                        <div style={{ marginTop: '10px' }}>
-                          <p style={{ fontSize: '0.85rem', marginBottom: '8px', color: 'var(--ion-color-medium)' }}>
-                            Фото ({stage.photoUrls.length}):
+
+                      <div className="stage-comments-section">
+                        {role !== 'client' ? (
+                          <>
+                            <IonItem lines="none">
+                              <IonTextarea
+                                label="Комментарий по этапу"
+                                labelPlacement="stacked"
+                                autoGrow
+                                value={stageCommentDrafts[stage.id] || ''}
+                                onIonInput={(e) =>
+                                  setStageCommentDrafts((prev) => ({
+                                    ...prev,
+                                    [stage.id]: String(e.detail.value ?? ''),
+                                  }))
+                                }
+                                placeholder="Введите комментарий"
+                              />
+                            </IonItem>
+                            <IonButton size="small" fill="outline" onClick={() => handleSaveStageComment(index)} className="stage-comment-save">
+                              Сохранить комментарий
+                            </IonButton>
+                          </>
+                        ) : stage.stageComment ? (
+                          <p className="stage-comment-text">
+                            <strong>Комментарий:</strong> {stage.stageComment}
                           </p>
-                          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(80px, 1fr))', gap: '8px' }}>
-                            {stage.photoUrls.map((photoUrl, idx) => (
-                              <div
-                                key={idx}
-                                style={{
-                                  position: 'relative',
-                                  borderRadius: '8px',
-                                  overflow: 'hidden',
-                                  backgroundColor: '#f0f0f0',
-                                }}
-                              >
-                                <img
-                                  src={backendAssetUrl(photoUrl)}
-                                  alt={`Stage ${index + 1} photo ${idx + 1}`}
-                                  style={{ width: '100%', height: '80px', objectFit: 'cover', display: 'block' }}
-                                  onClick={() => openGallery(stage.photoUrls || [], idx)}
-                                />
-                                {role !== 'client' && (
-                                  <button
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      handleRemovePhoto(index, photoUrl);
-                                    }}
-                                    style={{
-                                      position: 'absolute',
-                                      top: 0,
-                                      right: 0,
-                                      background: 'rgba(255, 0, 0, 0.8)',
-                                      color: 'white',
-                                      border: 'none',
-                                      padding: '2px 6px',
-                                      cursor: 'pointer',
-                                      fontSize: '12px',
-                                      borderRadius: '0 8px 0 4px',
-                                    }}
-                                  >
-                                    x
-                                  </button>
-                                )}
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-                      {(!stage.photoUrls || stage.photoUrls.length === 0) && (
-                        <p style={{ fontSize: '0.85rem', color: 'var(--ion-color-medium)', margin: '8px 0' }}>
-                          Фото пока не добавлено
-                        </p>
-                      )}
+                        ) : null}
+                      </div>
                     </div>
                   </div>
                 );
@@ -849,6 +1002,75 @@ const ProjectDetail: React.FC = () => {
                 <IonSelectOption value="on_hold">Приостановлен</IonSelectOption>
                 <IonSelectOption value="cancelled">Отменён</IonSelectOption>
               </IonSelect>
+            </IonItem>
+            <IonItem>
+              <IonLabel>Тип объекта</IonLabel>
+              <IonSelect
+                value={editProjectType}
+                onIonChange={(e) => setEditProjectType((e.detail.value as 'typical' | 'individual') || 'typical')}
+              >
+                <IonSelectOption value="typical">Типовой</IonSelectOption>
+                <IonSelectOption value="individual">Индивидуальный</IonSelectOption>
+              </IonSelect>
+            </IonItem>
+            <IonItem>
+              <IonInput
+                label="Площадь (м²)"
+                labelPlacement="floating"
+                type="number"
+                value={editAreaSqm}
+                onIonInput={(e) => {
+                  const value = String(e.detail.value ?? '');
+                  setEditAreaSqm(value === '' ? 0 : Number(value));
+                }}
+              />
+            </IonItem>
+            <IonItem>
+              <IonInput
+                label="Сметная стоимость (₽)"
+                labelPlacement="floating"
+                type="number"
+                value={editEstimatedCost}
+                onIonInput={(e) => {
+                  const value = String(e.detail.value ?? '');
+                  setEditEstimatedCost(value === '' ? 0 : Number(value));
+                }}
+              />
+            </IonItem>
+            <IonItem>
+              <IonInput
+                label="Дата начала"
+                labelPlacement="floating"
+                type="date"
+                value={editStartDate}
+                onIonInput={(e) => setEditStartDate(String(e.detail.value ?? ''))}
+              />
+            </IonItem>
+            <IonItem>
+              <IonInput
+                label="План сдачи"
+                labelPlacement="floating"
+                type="date"
+                value={editPlannedEndDate}
+                onIonInput={(e) => setEditPlannedEndDate(String(e.detail.value ?? ''))}
+              />
+            </IonItem>
+            <IonItem>
+              <IonInput
+                label="Фактическая дата сдачи"
+                labelPlacement="floating"
+                type="date"
+                value={editActualEndDate}
+                onIonInput={(e) => setEditActualEndDate(String(e.detail.value ?? ''))}
+              />
+            </IonItem>
+            <IonItem>
+              <IonInput
+                label="Ссылка на камеру"
+                labelPlacement="floating"
+                value={editCameraUrl}
+                onIonInput={(e) => setEditCameraUrl(String(e.detail.value ?? ''))}
+              />
             </IonItem>
             <IonButton expand="block" onClick={handleSaveEdit} className="ion-margin-top">
               Сохранить
@@ -952,6 +1174,52 @@ const ProjectDetail: React.FC = () => {
                   Сохранить даты
                 </IonButton>
               </>
+            )}
+          </IonContent>
+        </IonModal>
+
+        <IonModal
+          isOpen={documentPreviewOpen}
+          onDidDismiss={() => setDocumentPreviewOpen(false)}
+          className="document-preview-modal"
+        >
+          <IonHeader>
+            <IonToolbar>
+              <IonButtons slot="start">
+                {documentPreviewDoc && (
+                  <IonButton fill="clear" onClick={() => window.open(documentsApi.download(documentPreviewDoc.id), '_blank')}>
+                    Скачать файл
+                  </IonButton>
+                )}
+              </IonButtons>
+              <IonButtons slot="end">
+                <IonButton onClick={() => setDocumentPreviewOpen(false)}>
+                  <IonIcon slot="icon-only" icon={close} />
+                </IonButton>
+              </IonButtons>
+              <IonTitle>{documentPreviewDoc?.name || 'Документ'}</IonTitle>
+            </IonToolbar>
+          </IonHeader>
+          <IonContent className="document-preview-content">
+            {documentPreviewLoading && (
+              <div className="ion-text-center ion-padding">
+                <IonSpinner name="crescent" />
+              </div>
+            )}
+            {!documentPreviewLoading && documentPreviewMode === 'pdf' && documentPreviewUrl && (
+              <iframe
+                title="Просмотр документа"
+                src={documentPreviewUrl}
+                className="document-preview-frame"
+              />
+            )}
+            {!documentPreviewLoading && documentPreviewMode === 'docx' && (
+              <div className="document-preview-docx" dangerouslySetInnerHTML={{ __html: documentPreviewHtml }} />
+            )}
+            {!documentPreviewLoading && documentPreviewMode === 'unsupported' && (
+              <div className="ion-padding">
+                <p>{documentPreviewError || 'Просмотр этого формата не поддерживается.'}</p>
+              </div>
             )}
           </IonContent>
         </IonModal>

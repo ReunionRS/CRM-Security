@@ -17,6 +17,7 @@ import {
   IonSelect,
   IonSelectOption,
   IonModal,
+  IonSpinner,
   useIonToast,
 } from '@ionic/react';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
@@ -50,6 +51,17 @@ const isImageDoc = (d: LocalDocumentRecord): boolean => {
   return /\.(jpg|jpeg|png|gif|webp|bmp|svg)$/i.test(d.fileName);
 };
 
+const isPdfDoc = (d: LocalDocumentRecord): boolean => {
+  if (d.mimeType?.toLowerCase().includes('pdf')) return true;
+  return /\.pdf$/i.test(d.fileName);
+};
+
+const isDocxDoc = (d: LocalDocumentRecord): boolean => {
+  return /\.docx$/i.test(d.fileName);
+};
+
+const isPreviewableDoc = (d: LocalDocumentRecord): boolean => isImageDoc(d) || isPdfDoc(d) || isDocxDoc(d);
+
 const Documents: React.FC = () => {
   const [present] = useIonToast();
   const { role, user } = useAuth();
@@ -73,6 +85,13 @@ const Documents: React.FC = () => {
   const [previewZoom, setPreviewZoom] = useState(1);
   const [previewPanX, setPreviewPanX] = useState(0);
   const [previewPanY, setPreviewPanY] = useState(0);
+  const [filePreviewOpen, setFilePreviewOpen] = useState(false);
+  const [filePreviewLoading, setFilePreviewLoading] = useState(false);
+  const [filePreviewName, setFilePreviewName] = useState('');
+  const [filePreviewMode, setFilePreviewMode] = useState<'pdf' | 'docx' | 'unsupported' | null>(null);
+  const [filePreviewUrl, setFilePreviewUrl] = useState('');
+  const [filePreviewHtml, setFilePreviewHtml] = useState('');
+  const [filePreviewError, setFilePreviewError] = useState('');
 
   const toast = (message: string, color: 'success' | 'danger' | 'warning' = 'success') =>
     present({ message, duration: 2200, position: 'bottom', color });
@@ -88,7 +107,8 @@ const Documents: React.FC = () => {
       return;
     }
     const list = await listLocalDocuments({ clientUserId: selectedClientId });
-    setDocs(list);
+    const filtered = list.filter((d) => !/проект строения/i.test(d.docType || ''));
+    setDocs(filtered);
   };
 
   useEffect(() => {
@@ -125,8 +145,9 @@ const Documents: React.FC = () => {
   useEffect(() => {
     return () => {
       Object.values(imageUrlsRef.current).forEach((url) => URL.revokeObjectURL(url));
+      if (filePreviewUrl) URL.revokeObjectURL(filePreviewUrl);
     };
-  }, []);
+  }, [filePreviewUrl]);
 
   const imageDocs = useMemo(() => docs.filter(isImageDoc), [docs]);
 
@@ -232,6 +253,45 @@ const Documents: React.FC = () => {
     await deleteLocalDocument(id);
     toast('Удалено', 'success');
     await reload();
+  };
+
+  const openFilePreview = async (doc: LocalDocumentRecord) => {
+    setFilePreviewOpen(true);
+    setFilePreviewLoading(true);
+    setFilePreviewName(doc.fileName);
+    setFilePreviewMode(null);
+    setFilePreviewHtml('');
+    setFilePreviewError('');
+    if (filePreviewUrl) {
+      URL.revokeObjectURL(filePreviewUrl);
+      setFilePreviewUrl('');
+    }
+
+    try {
+      const blob = await getLocalDocumentBlob(doc.id);
+      if (!blob) throw new Error('Файл не найден');
+
+      if (isPdfDoc(doc)) {
+        const url = URL.createObjectURL(blob);
+        setFilePreviewUrl(url);
+        setFilePreviewMode('pdf');
+      } else if (isDocxDoc(doc)) {
+        const mammoth = await import('mammoth/mammoth.browser');
+        const buffer = await blob.arrayBuffer();
+        const result = await mammoth.convertToHtml({ arrayBuffer: buffer });
+        setFilePreviewHtml(result.value || '<p>Документ пуст.</p>');
+        setFilePreviewMode('docx');
+      } else {
+        setFilePreviewMode('unsupported');
+        setFilePreviewError('Для этого формата предпросмотр недоступен.');
+      }
+    } catch (error) {
+      setFilePreviewMode('unsupported');
+      setFilePreviewError(error instanceof Error ? error.message : 'Ошибка предпросмотра');
+      toast(error instanceof Error ? error.message : 'Ошибка предпросмотра', 'danger');
+    } finally {
+      setFilePreviewLoading(false);
+    }
   };
 
   const openPreview = (docId: string) => {
@@ -426,8 +486,12 @@ const Documents: React.FC = () => {
                             v{d.version} • {(d.size / 1024).toFixed(1)} KB • {new Date(d.uploadedAt).toLocaleString('ru-RU')}
                           </div>
                           <div className="documents-item-actions">
-                            {isImageDoc(d) && (
-                              <IonButton fill="clear" size="small" onClick={() => openPreview(d.id)}>
+                            {isPreviewableDoc(d) && (
+                              <IonButton
+                                fill="clear"
+                                size="small"
+                                onClick={() => (isImageDoc(d) ? openPreview(d.id) : openFilePreview(d))}
+                              >
                                 Просмотр
                               </IonButton>
                             )}
@@ -500,6 +564,39 @@ const Documents: React.FC = () => {
                 <IonButton fill="clear" onClick={nextPreview}>
                   <IonIcon icon={chevronForwardOutline} />
                 </IonButton>
+              </div>
+            )}
+          </IonContent>
+        </IonModal>
+
+        <IonModal
+          isOpen={filePreviewOpen}
+          onDidDismiss={() => setFilePreviewOpen(false)}
+          className="document-preview-modal"
+        >
+          <IonHeader>
+            <IonToolbar>
+              <IonButtons slot="end">
+                <IonButton onClick={() => setFilePreviewOpen(false)}>Закрыть</IonButton>
+              </IonButtons>
+              <IonTitle>{filePreviewName || 'Просмотр документа'}</IonTitle>
+            </IonToolbar>
+          </IonHeader>
+          <IonContent className="document-preview-content">
+            {filePreviewLoading && (
+              <div className="ion-text-center ion-padding">
+                <IonSpinner name="crescent" />
+              </div>
+            )}
+            {!filePreviewLoading && filePreviewMode === 'pdf' && filePreviewUrl && (
+              <iframe title="PDF preview" src={filePreviewUrl} className="document-preview-frame" />
+            )}
+            {!filePreviewLoading && filePreviewMode === 'docx' && (
+              <div className="document-preview-docx" dangerouslySetInnerHTML={{ __html: filePreviewHtml }} />
+            )}
+            {!filePreviewLoading && filePreviewMode === 'unsupported' && (
+              <div className="ion-padding">
+                <p>{filePreviewError || 'Предпросмотр недоступен. Используйте кнопку Скачать.'}</p>
               </div>
             )}
           </IonContent>

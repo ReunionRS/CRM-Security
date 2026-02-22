@@ -10,7 +10,7 @@ import {
   IonLabel,
 } from '@ionic/react';
 import { Project, getDefaultConstructionStages } from '../models/Project';
-import { projectsApi, usersApi } from '../api/services';
+import { documentsApi, projectsApi, usersApi } from '../api/services';
 
 const ProjectCreate: React.FC = () => {
   const [present] = useIonToast();
@@ -25,6 +25,7 @@ const ProjectCreate: React.FC = () => {
   const [plannedEndDate, setPlannedEndDate] = useState('');
   const [cameraUrl, setCameraUrl] = useState('');
   const [clientUserId, setClientUserId] = useState<string | undefined>(undefined);
+  const [projectPdfFile, setProjectPdfFile] = useState<File | null>(null);
   const [clients, setClients] = useState<Array<{ id: string; fio: string; email?: string }>>([]);
 
   const toast = (text: string, color: 'success' | 'danger') => {
@@ -89,7 +90,15 @@ const ProjectCreate: React.FC = () => {
         updatedAt: new Date().toISOString(),
       };
 
-      await projectsApi.create(payload);
+      const created = await projectsApi.create(payload);
+      if (projectPdfFile && created.id) {
+        await documentsApi.upload({
+          projectId: created.id,
+          clientUserId: finalClientUserId || undefined,
+          docType: 'Проект строения',
+          file: projectPdfFile,
+        });
+      }
       toast('Объект создан', 'success');
       setClientFio('');
       setClientPhone('');
@@ -101,6 +110,7 @@ const ProjectCreate: React.FC = () => {
       setPlannedEndDate('');
       setCameraUrl('');
       setClientUserId(undefined);
+      setProjectPdfFile(null);
       window.location.href = '/projects';
     } catch {
       toast('Ошибка создания', 'danger');
@@ -211,6 +221,22 @@ const ProjectCreate: React.FC = () => {
             value={cameraUrl}
             onIonInput={(e) => setCameraUrl(String(e.detail.value ?? ''))}
           />
+        </IonItem>
+        <IonItem lines="none">
+          <div style={{ width: '100%' }}>
+            <IonLabel style={{ display: 'block', marginBottom: '8px' }}>PDF проекта строения</IonLabel>
+            <input
+              type="file"
+              accept="application/pdf,.pdf"
+              onChange={(e) => {
+                const file = e.target.files?.[0] || null;
+                setProjectPdfFile(file);
+              }}
+            />
+            <div style={{ marginTop: '6px', fontSize: '0.85rem', opacity: 0.75 }}>
+              {projectPdfFile ? `Файл: ${projectPdfFile.name}` : 'Файл не выбран'}
+            </div>
+          </div>
         </IonItem>
       </IonList>
       <IonButton expand="block" type="submit">

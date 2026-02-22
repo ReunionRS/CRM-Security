@@ -25,6 +25,7 @@ import {
   moon,
   sunny,
   chatbubblesOutline,
+  notificationsOutline,
 } from 'ionicons/icons';
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
@@ -121,6 +122,20 @@ const Menu: React.FC = () => {
               <IonItem lines="full" detail>
                 <IonIcon className="menu-item-icon" slot="start" ios={chatbubblesOutline} md={chatbubblesOutline} />
                 <IonLabel>Чат поддержки</IonLabel>
+              </IonItem>
+            </IonRouterLink>
+          </IonMenuToggle>
+        </IonItemGroup>
+        <IonItemGroup>
+          <IonItemDivider onClick={() => toggleSubMenu('notifications')}>
+            <IonLabel>Уведомления</IonLabel>
+            <IonIcon className="menu-item-icon" slot="end" ios={chevronDownOutline} md={chevronDownSharp} />
+          </IonItemDivider>
+          <IonMenuToggle hidden={subMenu.notifications} autoHide={false}>
+            <IonRouterLink href="/notifications">
+              <IonItem lines="full" detail>
+                <IonIcon className="menu-item-icon" slot="start" ios={notificationsOutline} md={notificationsOutline} />
+                <IonLabel>Уведомления</IonLabel>
               </IonItem>
             </IonRouterLink>
           </IonMenuToggle>

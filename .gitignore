@@ -35,3 +35,6 @@ yarn-error.log*
 # local toolchains
 .local-jdks/
 android/local.properties
+android/keystore/
+*.jks
+*.keystore
