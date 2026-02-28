@@ -31,7 +31,34 @@ const {
 const pool = new Pool({ connectionString: DATABASE_URL });
 
 const app = express();
-app.use(cors({ origin: CORS_ORIGIN, credentials: true }));
+const extraAllowedOrigins = [
+  'http://localhost:5173',
+  'http://localhost',
+  'https://localhost',
+  'capacitor://localhost',
+  'ionic://localhost',
+  'https://martstroyizhevskcrm.ru',
+  'https://www.martstroyizhevskcrm.ru',
+];
+
+const allowedOrigins = new Set(
+  String(CORS_ORIGIN || '')
+    .split(',')
+    .map((v) => v.trim())
+    .filter(Boolean)
+);
+extraAllowedOrigins.forEach((origin) => allowedOrigins.add(origin));
+
+app.use(
+  cors({
+    credentials: true,
+    origin(origin, callback) {
+      if (!origin) return callback(null, true);
+      if (allowedOrigins.has(origin)) return callback(null, true);
+      return callback(new Error('Not allowed by CORS'));
+    },
+  })
+);
 app.use(express.json({ limit: '10mb' }));
 app.use('/uploads', express.static(UPLOADS_DIR));
 
